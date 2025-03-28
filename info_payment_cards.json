@@ -1,0 +1,9 @@
+[
+    {
+        "card_name": "Kurva Debit",
+        "cardholder_name": "Yo Mama", 
+        "card_number": 1234567890123456,        
+        "card_expiry": "0123",                  
+        "card_CVV": 123                         
+    }
+]
