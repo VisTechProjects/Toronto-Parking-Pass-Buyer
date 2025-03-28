@@ -41,11 +41,11 @@ Before running the script, update the JSON files with your personal information.
 This file contains your address details. Update the fields with your information:
 ```json
 {
-    "initals": "VK",                // Your initials
-    "surname": "lastname",        // Your last name
-    "steetNumber": "69",            // Your street number
-    "streetName": "Some St",    // Your street name
-    "permit_duration": "1 week"     // Permit duration ("1 week", 24 hours, 48 hours match drop down text)
+    "initals": "VK",               // Your initials
+    "surname": "lastname",         // Your last name
+    "steetNumber": "69",           // Your street number
+    "streetName": "Some St",       // Your street name
+    "permit_duration": "1 week"    // Permit duration ("1 week", 24 hours, 48 hours match drop down text)
 }
 ```
 
@@ -54,7 +54,7 @@ This file contains your payment card details. Update the fields with your card i
 ```json
 [
     {
-        "card_name": "Kurva Debit",             //Nickanme for card
+        "card_name": "Kurva Debit",     //Nickanme for card
         "cardholder_name": "Yo Mama", 
         "card_number": 1234567890123456,        
         "card_expiry": "0123",                  
@@ -69,7 +69,7 @@ This file contains your vehicle details. Update the fields with your vehicle inf
 [
     {
         "name": "Hooptie",      // Name/nickname of the vehicle
-        "plate": "ICUP"   // License plate number
+        "plate": "ICUP"         // License plate number
     },
     {
         "name": "Lexi",
