@@ -1,2 +1,6 @@
 selenium
 webdriver-manager
+asana
+pdfplumber
+PyPDF2
+python-dotenv

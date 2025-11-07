@@ -1,9 +1,10 @@
 import os
 import sys
 import json
-import asana
+import argparse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv('.env')  # Load environment variables from .env file
 
@@ -48,13 +49,53 @@ chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--disable-extensions")
 chrome_options.add_argument("--log-level=3")
 chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
-# chrome_options.add_experimental_option("prefs", { #disable images for faster loading
-#     "profile.managed_default_content_settings.images": 2,
-#     "profile.managed_default_content_settings.fonts": 2
-# })
 
-# ====== Environment Variables ====== asana
+# Set download directory to script folder
+download_dir = str(Path(__file__).parent.absolute())
+chrome_options.add_experimental_option("prefs", {
+    "download.default_directory": download_dir,
+    "download.prompt_for_download": False,
+    "download.directory_upgrade": True,
+    "safebrowsing.enabled": True
+})
+
+# ====== Environment Variables ======
 asana_access_token = os.getenv("asana_access_token")
+github_token = os.getenv("GITHUB_TOKEN")
+
+# ====== Logging Setup ======
+def log_event(message, level="INFO"):
+    """Log events to permit_history.log with timestamp."""
+    log_file = Path('permit_history.log')
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_line = f"[{timestamp}] [{level}] {message}\n"
+
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(log_line)
+
+    # Also print to console for immediate feedback
+    if level == "ERROR":
+        print(bcolors.FAIL + log_line.strip() + bcolors.ENDC)
+    elif level == "SUCCESS":
+        print(bcolors.OKGREEN + log_line.strip() + bcolors.ENDC)
+    else:
+        print(bcolors.OKCYAN + log_line.strip() + bcolors.ENDC)
+
+def take_error_screenshot(driver, error_name="error"):
+    """Take a screenshot when an error occurs for debugging."""
+    try:
+        screenshot_dir = Path('error_screenshots')
+        screenshot_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        screenshot_path = screenshot_dir / f"{error_name}_{timestamp}.png"
+
+        driver.save_screenshot(str(screenshot_path))
+        log_event(f"Error screenshot saved: {screenshot_path}", "ERROR")
+        return screenshot_path
+    except Exception as e:
+        log_event(f"Failed to take screenshot: {e}", "ERROR")
+        return None
 
 # ====== Helper Functions ======
 def wait_for_xpath(driver, xpath, timeout=10, visible=False):
@@ -99,6 +140,340 @@ def click_checkbox_if_unchecked(driver, xpath, label=""):
             print(bcolors.OKBLUE + "Checkbox was already selected." + bcolors.ENDC)
     else:
         print(bcolors.FAIL + "❌ Checkbox not found." + bcolors.ENDC)
+
+def extract_text_from_pdf(pdf_path):
+    """Extract text content from PDF using PyPDF2 or pdfplumber."""
+    text = ""
+
+    # Try pdfplumber first (better text extraction)
+    try:
+        import pdfplumber
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        if text.strip():
+            return text
+    except Exception:
+        pass
+
+    # Fallback to PyPDF2
+    try:
+        import PyPDF2
+        with open(pdf_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception:
+        pass
+
+    return text
+
+def parse_permit_data(text):
+    """Parse permit information from PDF text."""
+    import re
+
+    data = {
+        "permit_number": None,
+        "plate_number": None,
+        "barcode_label": None,
+        "valid_from": None,
+        "valid_to": None,
+    }
+
+    # Permit Number patterns
+    permit_patterns = [
+        r"Permit\s+no\.?\s*:\s*([A-Z0-9]+)",
+        r"Permit\s+number\s*:\s*([A-Z0-9]+)",
+    ]
+
+    # License Plate patterns
+    plate_patterns = [
+        r"Plate\s+no\.?\s*:\s*([A-Z0-9]+)",
+        r"(?:License|Licence)\s+plate\s*:\s*([A-Z0-9]+)",
+    ]
+
+    # Barcode Label pattern
+    barcode_patterns = [
+        r"(?:^|\n)\s*(\d{5})\s*(?:\n|$)",
+        r"(\d{5})\s*\n[^\n]*Permit\s+no",
+    ]
+
+    # Date patterns
+    date_patterns = [
+        r"Valid\s+from\s*:\s*([A-Z][a-z]+\s+\d{1,2},?\s+\d{4}(?:\s+at\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)",
+        r"Valid\s+from\s*:\s*(\d{1,2}/\d{1,2}/\d{4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)?)",
+    ]
+
+    valid_to_patterns = [
+        r"Valid\s+to\s*:\s*([A-Z][a-z]+\s+\d{1,2},?\s+\d{4}(?:\s+at\s+\d{1,2}:\d{2}\s*(?:AM|PM))?)",
+        r"Valid\s+to\s*:\s*(\d{1,2}/\d{1,2}/\d{4}(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM)?)?)",
+    ]
+
+    # Search for permit number
+    for pattern in permit_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            data["permit_number"] = match.group(1).strip()
+            break
+
+    # Search for plate number
+    for pattern in plate_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            data["plate_number"] = match.group(1).strip().upper()
+            break
+
+    # Search for barcode label
+    for pattern in barcode_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            data["barcode_label"] = match.group(1).strip()
+            break
+
+    # Search for valid from date
+    for pattern in date_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            data["valid_from"] = match.group(1).strip()
+            break
+
+    # Search for valid to date
+    for pattern in valid_to_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            data["valid_to"] = match.group(1).strip()
+            break
+
+    return data
+
+def find_permit_pdf(folder):
+    """Find the most recent PDF file that looks like a Toronto parking permit receipt."""
+    folder = Path(folder)
+
+    # Look for specific filename patterns
+    patterns = [
+        "*Temporary Parking Permit*.pdf",
+        "*Parking Permit Receipt*.pdf",
+        "*permit*.pdf",
+        "*receipt*.pdf",
+    ]
+
+    for pattern in patterns:
+        matches = list(folder.glob(pattern))
+        if matches:
+            return max(matches, key=lambda f: f.stat().st_mtime)
+
+    # If no pattern match, return most recent PDF
+    pdfs = list(folder.glob("*.pdf"))
+    if pdfs:
+        return max(pdfs, key=lambda f: f.stat().st_mtime)
+
+    return None
+
+def create_permit_json(permit_data, output_path):
+    """Create permit.json file from parsed permit data."""
+    # Convert dates to match ESP32 format
+    valid_from = permit_data["valid_from"]
+    valid_to = permit_data["valid_to"]
+
+    # Convert "Oct 25, 2025 at 12:00 AM" to "Oct 25, 2025: 12:00"
+    if valid_from and " at " in valid_from:
+        date_part, time_part = valid_from.split(" at ")
+        time_clean = time_part.replace(" AM", "").replace(" PM", "")
+        valid_from = f"{date_part}: {time_clean}"
+
+    if valid_to and " at " in valid_to:
+        date_part, time_part = valid_to.split(" at ")
+        time_clean = time_part.replace(" AM", "").replace(" PM", "")
+        valid_to = f"{date_part}: {time_clean}"
+
+    # Create JSON structure
+    json_data = {
+        "permitNumber": permit_data["permit_number"],
+        "plateNumber": permit_data["plate_number"],
+        "validFrom": valid_from,
+        "validTo": valid_to,
+        "barcodeValue": permit_data["permit_number"][1:] if permit_data["permit_number"] else None,
+        "barcodeLabel": permit_data["barcode_label"]
+    }
+
+    # Write to file
+    with open(output_path, 'w') as f:
+        json.dump(json_data, f, indent=2)
+
+    print(bcolors.OKGREEN + f"\nCreated permit JSON: {output_path}" + bcolors.ENDC)
+    return json_data
+
+def archive_pdf(pdf_path):
+    """Move PDF to old_permits archive folder with timestamp."""
+    import shutil
+
+    # Create archive folder if it doesn't exist
+    archive_dir = Path('old_permits')
+    archive_dir.mkdir(exist_ok=True)
+
+    # Generate timestamped filename
+    pdf_path = Path(pdf_path)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    archived_name = f"permit_{timestamp}{pdf_path.suffix}"
+    archived_path = archive_dir / archived_name
+
+    # Move the file
+    shutil.move(str(pdf_path), str(archived_path))
+    print(bcolors.OKCYAN + f"Archived PDF to: {archived_path}" + bcolors.ENDC)
+
+    return archived_path
+
+def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, target_branch='permit'):
+    """
+    Commit and push permit.json to the parking_pass_display repo.
+
+    Args:
+        file_path: Path to permit.json
+        commit_message: Commit message
+        target_repo_path: Path to parking_pass_display repo (defaults to ../parking_pass_display)
+        target_branch: Target branch (defaults to 'permit')
+    """
+    import subprocess
+    import shutil
+    import time
+
+    # Default to ../parking_pass_display if not specified
+    if target_repo_path is None:
+        current_dir = Path(__file__).parent
+        target_repo_path = current_dir.parent / 'parking_pass_display'
+
+    target_repo_path = Path(target_repo_path)
+    original_dir = os.getcwd()
+
+    try:
+        # Check if target repo exists
+        if not target_repo_path.exists():
+            print(bcolors.FAIL + f"Target repo not found: {target_repo_path}" + bcolors.ENDC)
+            print(bcolors.WARNING + "Please set the correct path to parking_pass_display repo" + bcolors.ENDC)
+            return False
+
+        # Change to target repo directory FIRST
+        os.chdir(target_repo_path)
+
+        try:
+            # Check current branch
+            result = subprocess.run(['git', 'branch', '--show-current'],
+                                  capture_output=True, text=True, check=True)
+            current_branch = result.stdout.strip()
+
+            # Checkout target branch if not already on it
+            if current_branch != target_branch:
+                print(bcolors.OKCYAN + f"Switching to '{target_branch}' branch..." + bcolors.ENDC)
+
+                # Stash any uncommitted changes to avoid conflicts
+                stash_result = subprocess.run(['git', 'stash', 'push', '-u', '-m', 'Auto-stash before permit update'],
+                                            capture_output=True, text=True, check=False)
+                stashed = 'No local changes to save' not in stash_result.stdout
+
+                # Checkout the permit branch
+                subprocess.run(['git', 'checkout', target_branch], check=True)
+
+                # Give git a moment to release file handles after checkout
+                time.sleep(0.5)
+            else:
+                stashed = False
+
+            # NOW copy permit.json AFTER switching branches (with retry for file locks)
+            target_file = target_repo_path / 'permit.json'
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # Read source file
+                    with open(file_path, 'r') as src:
+                        content = src.read()
+
+                    # Write to destination (this seems to work better than shutil.copy2 on Windows)
+                    with open(target_file, 'w') as dst:
+                        dst.write(content)
+
+                    print(bcolors.OKGREEN + f"Copied permit.json to {target_repo_path}" + bcolors.ENDC)
+                    break
+                except (PermissionError, IOError) as e:
+                    if attempt < max_retries - 1:
+                        print(bcolors.WARNING + f"File locked, retrying in 1 second... (attempt {attempt + 1}/{max_retries})" + bcolors.ENDC)
+                        time.sleep(1)
+                    else:
+                        raise  # Re-raise if all retries failed
+
+            # Add the file
+            subprocess.run(['git', 'add', 'permit.json'], check=True)
+
+            # Check if there are STAGED changes to commit (not just untracked files)
+            diff_result = subprocess.run(['git', 'diff', '--cached', '--name-only'],
+                                        capture_output=True, text=True, check=True)
+
+            if not diff_result.stdout.strip():
+                print(bcolors.OKCYAN + "permit.json is already up-to-date in parking_pass_display/permit branch" + bcolors.ENDC)
+                return True  # Success - no changes needed
+            else:
+                # Commit
+                subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+
+                # Push (use GitHub token if available for authentication)
+                if github_token:
+                    # Get current remote URL
+                    remote_result = subprocess.run(['git', 'remote', 'get-url', 'origin'],
+                                                 capture_output=True, text=True, check=True)
+                    remote_url = remote_result.stdout.strip()
+
+                    # Convert to token-authenticated URL
+                    if 'github.com' in remote_url:
+                        if remote_url.startswith('https://'):
+                            # Already HTTPS, add token
+                            auth_url = remote_url.replace('https://', f'https://{github_token}@')
+                        elif remote_url.startswith('git@'):
+                            # Convert SSH to HTTPS with token
+                            auth_url = remote_url.replace('git@github.com:', f'https://{github_token}@github.com/')
+                            auth_url = auth_url.replace('.git', '')
+
+                        # Temporarily set remote URL with token
+                        subprocess.run(['git', 'remote', 'set-url', 'origin', auth_url], check=True)
+                        subprocess.run(['git', 'push'], check=True)
+                        # Restore original URL
+                        subprocess.run(['git', 'remote', 'set-url', 'origin', remote_url], check=True)
+                    else:
+                        # Not a GitHub URL, push normally
+                        subprocess.run(['git', 'push'], check=True)
+                else:
+                    # No token, use default git credentials
+                    subprocess.run(['git', 'push'], check=True)
+
+                print(bcolors.OKGREEN + f"Pushed to GitHub (parking_pass_display/{target_branch}): {commit_message}" + bcolors.ENDC)
+                log_event(f"Successfully pushed permit update: {commit_message}", "SUCCESS")
+
+            # Switch back to original branch if we changed
+            if current_branch and current_branch != target_branch:
+                subprocess.run(['git', 'checkout', current_branch], check=False)
+
+                # Restore stashed changes if we stashed anything
+                if stashed:
+                    print(bcolors.OKCYAN + "Restoring stashed changes..." + bcolors.ENDC)
+                    subprocess.run(['git', 'stash', 'pop'], check=False)
+
+            return True
+
+        finally:
+            # Always return to original directory
+            os.chdir(original_dir)
+
+    except subprocess.CalledProcessError as e:
+        print(bcolors.FAIL + f"Git operation failed: {e}" + bcolors.ENDC)
+        os.chdir(original_dir)
+        return False
+    except Exception as e:
+        print(bcolors.FAIL + f"Error: {e}" + bcolors.ENDC)
+        return False
 
 def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana_section_name):
     
@@ -158,56 +533,77 @@ def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana
     print(f"📂 Task added to section: {section['name']}")
 
 # ====== Main Automation Workflow ======
-def get_parking_pass():
+def get_parking_pass(vehicle_index=None, card_index=None, auto_payment_wait=False, payment_wait_seconds=30):
     url = "https://secure.toronto.ca/wes/eTPP/welcome.do"
 
     # Load data
-    with open('info_payment_cards.json', 'r') as file:
+    with open('config/info_payment_cards.json', 'r') as file:
         info_payments = json.load(file)
 
-    with open('info_addresses.json', 'r') as file:
+    with open('config/info_addresses.json', 'r') as file:
         info_addresses = json.load(file)
 
-    with open('info_cars.json', 'r') as file:
+    with open('config/info_cars.json', 'r') as file:
         info_cars = json.load(file)
 
-    # Prompt for vehicle
-    print("\n" + bcolors.WARNING + "Which vehicle would you like to get a parking permit for?" + bcolors.ENDC)
-    for idx, vehicle in enumerate(info_cars):
-        print(f"{bcolors.WARNING}{idx + 1}. {bcolors.OKCYAN}{vehicle['name']} - {vehicle['plate']}{bcolors.ENDC}")
-        
-    print(bcolors.HEADER + "\nChoose wisely... your parking fate depends on it." + bcolors.ENDC)
+    # Select vehicle (either from CLI arg or interactive prompt)
+    if vehicle_index is not None:
+        if 0 <= vehicle_index < len(info_cars):
+            selected_vehicle = info_cars[vehicle_index]
+            print(bcolors.OKGREEN + f"Using vehicle: {selected_vehicle['name']} - {selected_vehicle['plate']}" + bcolors.ENDC)
+        else:
+            print(bcolors.FAIL + f"Invalid vehicle index: {vehicle_index}" + bcolors.ENDC)
+            return None, None
+    else:
+        # Interactive mode
+        print("\n" + bcolors.WARNING + "Which vehicle would you like to get a parking permit for?" + bcolors.ENDC)
+        for idx, vehicle in enumerate(info_cars):
+            print(f"{bcolors.WARNING}{idx + 1}. {bcolors.OKCYAN}{vehicle['name']} - {vehicle['plate']}{bcolors.ENDC}")
 
-    while True:
-        try:
-            choice = int(input(bcolors.OKGREEN + "\nEnter the number for the vehicle: " + bcolors.ENDC))
-            if 1 <= choice <= len(info_cars):
-                selected_vehicle = info_cars[choice - 1]
-                break
-            else:
-                print(bcolors.FAIL + "Please enter a valid number from the list" + bcolors.ENDC)
-        except ValueError:
-            print(bcolors.WARNING + "Please enter a number" + bcolors.ENDC)
+        print(bcolors.HEADER + "\nChoose wisely... your parking fate depends on it." + bcolors.ENDC)
 
-    # Prompt for payment card
-    print(bcolors.WARNING + "\nWhich card would you like to use to pay for parking permit?" + bcolors.ENDC)
-    for idx, payment_card in enumerate(info_payments):
-        print(f"{bcolors.WARNING}{idx + 1}. {bcolors.OKCYAN}{payment_card['card_name']}{bcolors.ENDC}")
-    print(bcolors.HEADER + "\nRemember, it's not Monopoly money... or is it?" + bcolors.ENDC)
+        while True:
+            try:
+                choice = int(input(bcolors.OKGREEN + "\nEnter the number for the vehicle: " + bcolors.ENDC))
+                if 1 <= choice <= len(info_cars):
+                    selected_vehicle = info_cars[choice - 1]
+                    break
+                else:
+                    print(bcolors.FAIL + "Please enter a valid number from the list" + bcolors.ENDC)
+            except ValueError:
+                print(bcolors.WARNING + "Please enter a number" + bcolors.ENDC)
 
-    while True:
-        try:
-            choice = int(input(bcolors.OKGREEN + "\nEnter the number for the card: " + bcolors.ENDC))
-            if 1 <= choice <= len(info_payments):
-                selected_payment_card = info_payments[choice - 1]
-                break
-            else:
-                print(bcolors.FAIL + "Please enter a valid number from the list" + bcolors.ENDC)
-        except ValueError:
-            print(bcolors.WARNING + "Please enter a number" + bcolors.ENDC)
+    # Select payment card (either from CLI arg or interactive prompt)
+    if card_index is not None:
+        if 0 <= card_index < len(info_payments):
+            selected_payment_card = info_payments[card_index]
+            print(bcolors.OKGREEN + f"Using payment card: {selected_payment_card['card_name']}" + bcolors.ENDC)
+        else:
+            print(bcolors.FAIL + f"Invalid card index: {card_index}" + bcolors.ENDC)
+            return None, None
+    else:
+        # Interactive mode
+        print(bcolors.WARNING + "\nWhich card would you like to use to pay for parking permit?" + bcolors.ENDC)
+        for idx, payment_card in enumerate(info_payments):
+            print(f"{bcolors.WARNING}{idx + 1}. {bcolors.OKCYAN}{payment_card['card_name']}{bcolors.ENDC}")
+        print(bcolors.HEADER + "\nRemember, it's not Monopoly money... or is it?" + bcolors.ENDC)
+
+        while True:
+            try:
+                choice = int(input(bcolors.OKGREEN + "\nEnter the number for the card: " + bcolors.ENDC))
+                if 1 <= choice <= len(info_payments):
+                    selected_payment_card = info_payments[choice - 1]
+                    break
+                else:
+                    print(bcolors.FAIL + "Please enter a valid number from the list" + bcolors.ENDC)
+            except ValueError:
+                print(bcolors.WARNING + "Please enter a number" + bcolors.ENDC)
 
     print(bcolors.HEADER + f"\nGetting parking pass for: {bcolors.WARNING + selected_vehicle['name'] + bcolors.HEADER} with plate {bcolors.OKBLUE + selected_vehicle['plate'] + bcolors.ENDC}")
     print(bcolors.OKCYAN + "\nLet's hope this car is worth it..." + bcolors.ENDC)
+
+    # Log the purchase attempt
+    log_event(f"Starting purchase for {selected_vehicle['name']} ({selected_vehicle['plate']})")
 
     # Setup WebDriver
     service = Service(ChromeDriverManager().install(), log_path='NUL')
@@ -254,7 +650,9 @@ def get_parking_pass():
             wait_for_xpath(driver, '//*[@id="maincontent"]/div[2]/div/div[1]/div/div[2]/div/div/div/div/div[4]/button').click()
         except:
             print(bcolors.FAIL + "Space is not available" + bcolors.ENDC)
-            return
+            log_event("No parking space available", "ERROR")
+            take_error_screenshot(driver, "no_space_available")
+            return None, None
 
         # ===== Page 3 =====
         wait_for_xpath(driver, '//*[@id="maincontent"]/div[2]/div/div[1]/div/div[2]/div/div/div/div[3]/button')
@@ -275,39 +673,188 @@ def get_parking_pass():
         driver.switch_to.frame(iframe)
 
         fill_input_field(driver, '//*[@id="cardholder"]', selected_payment_card["cardholder_name"], "cardholder_name")
-        fill_input_field(driver, '//*[@id="pan"]', selected_payment_card["card_number"], "card_number")
-        fill_input_field(driver, '//*[@id="expiry_date"]', selected_payment_card["card_expiry"], "card_expiry")
-        fill_input_field(driver, '//*[@id="cvv"]', selected_payment_card["card_CVV"], "card_CVV")
+        # fill_input_field(driver, '//*[@id="pan"]', selected_payment_card["card_number"], "card_number")
+        # fill_input_field(driver, '//*[@id="expiry_date"]', selected_payment_card["card_expiry"], "card_expiry")
+        # fill_input_field(driver, '//*[@id="cvv"]', selected_payment_card["card_CVV"], "card_CVV")
 
-        print(bcolors.OKCYAN + "\nWaiting on you to complete payment... " + bcolors.ENDC, end='')
-        print(bcolors.HEADER + "\n\nPress " + bcolors.ENDC, end='')
-        print(bcolors.WARNING + "enter" + bcolors.ENDC, end='')
-        print(bcolors.HEADER + " when done..." + bcolors.ENDC, end='')
-        input()
+        if auto_payment_wait:
+            # Automatic mode: wait for specified seconds then proceed
+            print(bcolors.OKCYAN + f"\nAuto-wait mode: Waiting {payment_wait_seconds} seconds for payment page to load..." + bcolors.ENDC)
+            import time
+            time.sleep(payment_wait_seconds)
+            print(bcolors.OKGREEN + "Auto-wait complete, proceeding..." + bcolors.ENDC)
+        else:
+            # Manual mode: wait for user to press enter
+            print(bcolors.OKCYAN + "\nWaiting on you to complete payment... " + bcolors.ENDC, end='')
+            print(bcolors.HEADER + "\n\nPress " + bcolors.ENDC, end='')
+            print(bcolors.WARNING + "enter" + bcolors.ENDC, end='')
+            print(bcolors.HEADER + " when done..." + bcolors.ENDC, end='')
+            input()
+        
+        # FIXED: Moved return statement here (before finally block)
+        return selected_vehicle['name'], selected_vehicle['plate']
 
     finally:
         driver.quit()
-        
-        return selected_vehicle['name'], selected_vehicle['plate']
 
 if __name__ == "__main__":
-    vehical_name, vehical_plate = get_parking_pass()
-    
-    add_task_to_asana(
-        task_name = f"Renew Parking Pass for {vehical_name} - {vehical_plate}",
-        task_notes = """<body>
-                Renew parking pass for this *crap vehicle*
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description='Toronto Parking Pass Buyer - Automated parking permit purchase',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  # Interactive mode (prompts for vehicle and card selection)
+  python parking_pass_buyer.py
 
-                **Don't forget dumbass!**
+  # Automated mode (use first vehicle and first card)
+  python parking_pass_buyer.py --vehicle 0 --card 0
 
-                PS: If you forget again, future you will be very disappointed.
-            </body>""",        
-        due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-        asana_project_name = "Parking Pass",
-        asana_section_name = "Weekly Parking Pass todo"
+  # Auto-wait mode (waits 30 seconds instead of manual confirmation)
+  python parking_pass_buyer.py --vehicle 0 --card 0 --auto-wait
+
+  # Auto-wait with custom wait time (60 seconds)
+  python parking_pass_buyer.py --vehicle 0 --card 0 --auto-wait --wait-seconds 60
+
+  # Skip Asana task creation
+  python parking_pass_buyer.py --vehicle 0 --card 0 --no-asana
+
+  # Process existing PDF without buying (searches for latest PDF)
+  python parking_pass_buyer.py --parse-only
+
+  # Process specific PDF file
+  python parking_pass_buyer.py --parse-only --pdf "path/to/permit.pdf"
+        '''
     )
-    
-    print(bcolors.OKGREEN + bcolors.UNDERLINE + "Done" + bcolors.ENDC)
-    
+
+    parser.add_argument('--vehicle', type=int, help='Vehicle index (0-based, see config/info_cars.json)')
+    parser.add_argument('--card', type=int, help='Payment card index (0-based, see config/info_payment_cards.json)')
+    parser.add_argument('--no-asana', action='store_true', help='Skip creating Asana task')
+    parser.add_argument('--no-github', action='store_true', help='Skip GitHub commit and push')
+    parser.add_argument('--parse-only', action='store_true', help='Only parse existing PDF without buying new permit')
+    parser.add_argument('--pdf', type=str, help='Path to specific PDF file to parse (use with --parse-only)')
+    parser.add_argument('--auto-wait', action='store_true', help='Auto-wait for payment page instead of manual confirmation')
+    parser.add_argument('--wait-seconds', type=int, default=30, help='Seconds to wait in auto-wait mode (default: 30)')
+
+    args = parser.parse_args()
+
+    # Parse-only mode: just process existing PDF
+    if args.parse_only:
+        print(bcolors.OKCYAN + "Parse-only mode: Looking for existing permit PDF..." + bcolors.ENDC)
+
+        # Use specified PDF or search for one
+        if args.pdf:
+            pdf_path = Path(args.pdf)
+            if not pdf_path.exists():
+                print(bcolors.FAIL + f"Specified PDF not found: {pdf_path}" + bcolors.ENDC)
+                sys.exit(1)
+            print(bcolors.OKGREEN + f"Using specified PDF: {pdf_path}" + bcolors.ENDC)
+        else:
+            pdf_path = find_permit_pdf('.')
+            if not pdf_path:
+                print(bcolors.FAIL + "No permit PDF found in current directory." + bcolors.ENDC)
+                print(bcolors.WARNING + "Use --pdf to specify a PDF file path" + bcolors.ENDC)
+                sys.exit(1)
+            print(bcolors.OKGREEN + f"Found PDF: {pdf_path}" + bcolors.ENDC)
+
+        # Extract and parse
+        text = extract_text_from_pdf(pdf_path)
+        permit_data = parse_permit_data(text)
+
+        # Display extracted data
+        print(bcolors.OKCYAN + "\nExtracted permit data:" + bcolors.ENDC)
+        for key, value in permit_data.items():
+            print(f"  {key}: {value or 'NOT FOUND'}")
+
+        # Create JSON
+        if all(permit_data.values()):
+            json_path = Path('permit.json')
+            create_permit_json(permit_data, json_path)
+
+            # Push to GitHub if not disabled
+            github_success = True
+            if not args.no_github:
+                github_success = commit_and_push_to_github(json_path, f"Update permit to {permit_data['permit_number']}")
+
+            # Only archive the PDF after successful GitHub push (or if GitHub push skipped)
+            if github_success or args.no_github:
+                archive_pdf(pdf_path)
+            else:
+                print(bcolors.FAIL + "GitHub push failed - PDF not archived (you can try again)" + bcolors.ENDC)
+        else:
+            print(bcolors.FAIL + "\nMissing permit data - JSON not created" + bcolors.ENDC)
+
+        sys.exit(0)
+
+    # Normal mode: buy permit
+    result = get_parking_pass(
+        vehicle_index=args.vehicle,
+        card_index=args.card,
+        auto_payment_wait=args.auto_wait,
+        payment_wait_seconds=args.wait_seconds
+    )
+
+    if result is None or result[0] is None or result[1] is None:
+        print(bcolors.FAIL + "Failed to get parking pass." + bcolors.ENDC)
+        sys.exit(1)
+
+    vehical_name, vehical_plate = result
+
+    # Process the downloaded PDF
+    print(bcolors.OKCYAN + "\n\n=== Processing Permit PDF ===" + bcolors.ENDC)
+    pdf_path = find_permit_pdf('.')
+
+    if pdf_path:
+        print(bcolors.OKGREEN + f"Found PDF: {pdf_path}" + bcolors.ENDC)
+
+        # Extract text and parse
+        text = extract_text_from_pdf(pdf_path)
+        permit_data = parse_permit_data(text)
+
+        # Display extracted data
+        print(bcolors.OKCYAN + "\nExtracted permit data:" + bcolors.ENDC)
+        for key, value in permit_data.items():
+            status = bcolors.OKGREEN if value else bcolors.FAIL
+            print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
+
+        # Create permit.json if we got all data
+        if all(permit_data.values()):
+            json_path = Path('permit.json')
+            create_permit_json(permit_data, json_path)
+
+            # Push to GitHub if not disabled
+            github_success = True
+            if not args.no_github:
+                print(bcolors.OKCYAN + "\nPushing to GitHub..." + bcolors.ENDC)
+                github_success = commit_and_push_to_github(json_path, f"Update permit to {permit_data['permit_number']}")
+
+            # Only archive the PDF after successful GitHub push (or if GitHub push skipped)
+            if github_success or args.no_github:
+                archive_pdf(pdf_path)
+            else:
+                print(bcolors.FAIL + "GitHub push failed - PDF not archived (you can try again)" + bcolors.ENDC)
+        else:
+            print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted. JSON file may be incomplete." + bcolors.ENDC)
+    else:
+        print(bcolors.WARNING + "No permit PDF found. Skipping JSON creation." + bcolors.ENDC)
+
+    # Create Asana task if not disabled
+    if not args.no_asana:
+        add_task_to_asana(
+            task_name = f"Renew Parking Pass for {vehical_name} - {vehical_plate}",
+            task_notes = """<body>
+                    Renew parking pass for this *crap vehicle*
+
+                    **Don't forget dumbass!**
+
+                    PS: If you forget again, future you will be very disappointed.
+                </body>""",
+            due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
+            asana_project_name = "Parking Pass",
+            asana_section_name = "Weekly Parking Pass todo"
+        )
+
+    print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone" + bcolors.ENDC)
+
     print(bcolors.HEADER + bcolors.UNDERLINE + "\n\nWhy did I waste my life making this...\n\n" + bcolors.ENDC)
     print(bcolors.OKCYAN + "Remember: Parking is temporary, but sarcasm is forever." + bcolors.ENDC)
