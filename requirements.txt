@@ -1,6 +1,6 @@
 selenium
 webdriver-manager
-asana
+asana>=5.0.0
 pdfplumber
 PyPDF2
 python-dotenv
