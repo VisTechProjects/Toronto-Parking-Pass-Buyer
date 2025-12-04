@@ -1,7 +1,9 @@
 /config
 /old_permits
-/error_screenshots
 *.pdf
-*.log
 .env
 permit.json
+/.claude
+__pycache__
+permit_history.log
+buy_*.bat
