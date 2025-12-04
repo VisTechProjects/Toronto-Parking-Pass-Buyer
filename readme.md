@@ -1,6 +1,6 @@
 # Toronto Parking Pass Buyer
 
-![Python](https://img.shields.io/badge/Python-3.8+-blue) ![Selenium](https://img.shields.io/badge/Selenium-automation-green) ![Asana SDK](https://img.shields.io/badge/Asana_SDK-v5.0+-orange)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://www.python.org/) [![Selenium](https://img.shields.io/badge/Selenium-automation-green)](https://www.selenium.dev/) [![Asana SDK](https://img.shields.io/badge/Asana_SDK-v5.0+-orange)](https://github.com/Asana/python-asana)
 
 Automates purchasing and refetching parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download.
 
