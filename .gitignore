@@ -7,3 +7,5 @@ permit.json
 __pycache__
 permit_history.log
 buy_*.bat
+/error_screenshots
+/testing
