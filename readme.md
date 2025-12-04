@@ -143,7 +143,7 @@ python parking_pass_buyer.py --parse-only
 | `--pdf PATH` | Specific PDF to parse (with --parse-only) |
 
 ## ESP32 Integration
-This script pushes `permit.json` to a separate repo (`parking_pass_display`) which an ESP32 e-ink display reads to show the current permit barcode.
+This script pushes `permit.json` to the [parking_pass_display](https://github.com/VisTechProjects/parking_pass_display) repo, which an ESP32 e-ink display reads to show the current permit barcode. This project is the backend/automation side - see the display repo for the hardware side.
 
 ## Troubleshooting
 - Ensure Google Chrome is installed and up-to-date
