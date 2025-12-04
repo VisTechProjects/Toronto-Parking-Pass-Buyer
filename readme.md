@@ -152,9 +152,6 @@ This script pushes `permit.json` to the [parking_pass_display](https://github.co
 - If elements aren't found, the Toronto site may have changed - check XPaths
 - Payment failures will fall back to manual mode
 
-## License
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
 ## Acknowledgments
 - [Selenium](https://www.selenium.dev/) for browser automation
 - [WebDriver Manager](https://github.com/SergeyPirogov/webdriver_manager) for managing ChromeDriver
