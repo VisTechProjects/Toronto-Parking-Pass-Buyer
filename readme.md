@@ -5,6 +5,10 @@ Automates purchasing and refetching parking permits from [Toronto Temp parking p
 ## Why I made this
 Laziness and boredom, the fact I made this readme... says it all...
 
+Also, the City of Toronto won't let me buy a yearly permit, requires the permit location to be my permanent address, makes me repurchase every single week, and their website looks like it was built in 2005. So... City of Toronto...
+
+[![Linus Torvalds Middle Finger](https://media.giphy.com/media/xndHaRIcvge5y/giphy.gif)](https://giphy.com/gifs/funny-mixed-middle-finger-xndHaRIcvge5y)
+
 ## Features
 - **Buy new permits** - Fully automated: fills forms, submits payment, downloads PDF
 - **Refetch existing permits** - Search by plate + card, download PDF
