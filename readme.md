@@ -1,13 +1,13 @@
 # Toronto Parking Pass Buyer
 
-Automates purchasing and reprinting parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download.
+Automates purchasing and refetching parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download.
 
 ## Why I made this
 Laziness and boredom, the fact I made this readme... says it all...
 
 ## Features
 - **Buy new permits** - Fully automated: fills forms, submits payment, downloads PDF
-- **Reprint existing permits** - Search by plate + card, download PDF
+- **Refetch existing permits** - Search by plate + card, download PDF
 - **PDF parsing** - Extracts permit data (number, dates, barcode)
 - **GitHub sync** - Pushes permit.json to separate repo for ESP32 display
 - **Asana integration** - Creates reminder task to renew next week
@@ -107,15 +107,15 @@ This file contains your vehicle details. Update the fields with your vehicle inf
 ```bash
 python parking_pass_buyer.py
 ```
-Prompts you to choose: Buy new permit or Reprint existing, then select vehicle and card.
+Prompts you to choose: Buy new permit or Refetch existing, then select vehicle and card.
 
 ### CLI Mode (Automated)
 ```bash
 # Buy new permit (vehicle index 1, card index 0)
 python parking_pass_buyer.py --vehicle 1 --card 0
 
-# Reprint existing permit
-python parking_pass_buyer.py --reprint --vehicle 1 --card 0
+# Refetch existing permit
+python parking_pass_buyer.py --refetch --vehicle 1 --card 0
 
 # Skip Asana task creation
 python parking_pass_buyer.py --vehicle 1 --card 0 --no-asana
@@ -132,7 +132,7 @@ python parking_pass_buyer.py --parse-only
 |--------|-------------|
 | `--vehicle N` | Vehicle index (0-based) |
 | `--card N` | Payment card index (0-based) |
-| `--reprint` | Reprint existing permit instead of buying new |
+| `--refetch` | Refetch existing permit instead of buying new |
 | `--no-asana` | Skip Asana task creation |
 | `--no-github` | Skip GitHub push |
 | `--parse-only` | Only parse existing PDF, no browser |

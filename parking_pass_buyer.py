@@ -554,8 +554,8 @@ def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana
 
     print(f" Task added to section: {section['name']}")
 
-# ====== Reprint Permit Workflow ======
-def reprint_permit(vehicle_index=None, card_index=None):
+# ====== Refetch Permit Workflow ======
+def refetch_permit(vehicle_index=None, card_index=None):
     """Navigate to permit search page, enter plate + last 4 card digits, and download the PDF."""
     url = "https://secure.toronto.ca/wes/eTPP/searchPermit.do?back=0"
 
@@ -575,7 +575,7 @@ def reprint_permit(vehicle_index=None, card_index=None):
             print(bcolors.FAIL + f"Invalid vehicle index: {vehicle_index}" + bcolors.ENDC)
             return None, None
     else:
-        print("\n" + bcolors.WARNING + "Which vehicle's permit would you like to reprint?" + bcolors.ENDC)
+        print("\n" + bcolors.WARNING + "Which vehicle's permit would you like to refetch?" + bcolors.ENDC)
         for idx, vehicle in enumerate(info_cars):
             print(f"{bcolors.WARNING}{idx + 1}. {bcolors.OKCYAN}{vehicle['name']} - {vehicle['plate']}{bcolors.ENDC}")
 
@@ -616,8 +616,8 @@ def reprint_permit(vehicle_index=None, card_index=None):
 
     last_4_digits = str(selected_payment_card["card_number"])[-4:]
 
-    print(bcolors.HEADER + f"\nReprinting permit for: {bcolors.WARNING + selected_vehicle['name'] + bcolors.HEADER} with plate {bcolors.OKBLUE + selected_vehicle['plate'] + bcolors.ENDC}")
-    log_event(f"Starting reprint for {selected_vehicle['name']} ({selected_vehicle['plate']})")
+    print(bcolors.HEADER + f"\nRefetching permit for: {bcolors.WARNING + selected_vehicle['name'] + bcolors.HEADER} with plate {bcolors.OKBLUE + selected_vehicle['plate'] + bcolors.ENDC}")
+    log_event(f"Starting refetch for {selected_vehicle['name']} ({selected_vehicle['plate']})")
 
     # Setup WebDriver
     service = Service(ChromeDriverManager().install(), log_path='NUL')
@@ -668,9 +668,9 @@ def reprint_permit(vehicle_index=None, card_index=None):
         return selected_vehicle['name'], selected_vehicle['plate']
 
     except Exception as e:
-        print(bcolors.FAIL + f"Error during reprint: {e}" + bcolors.ENDC)
-        log_event(f"Reprint failed: {e}", "ERROR")
-        take_error_screenshot(driver, "reprint_error")
+        print(bcolors.FAIL + f"Error during refetch: {e}" + bcolors.ENDC)
+        log_event(f"Refetch failed: {e}", "ERROR")
+        take_error_screenshot(driver, "refetch_error")
         return None, None
 
     finally:
@@ -879,8 +879,8 @@ Examples:
   # Process specific PDF file
   python parking_pass_buyer.py --parse-only --pdf "path/to/permit.pdf"
 
-  # Reprint existing permit (search by plate + card)
-  python parking_pass_buyer.py --reprint --vehicle 0 --card 0
+  # Refetch existing permit (search by plate + card)
+  python parking_pass_buyer.py --refetch --vehicle 0 --card 0
         '''
     )
 
@@ -890,7 +890,7 @@ Examples:
     parser.add_argument('--no-github', action='store_true', help='Skip GitHub commit and push')
     parser.add_argument('--parse-only', action='store_true', help='Only parse existing PDF without buying new permit')
     parser.add_argument('--pdf', type=str, help='Path to specific PDF file to parse (use with --parse-only)')
-    parser.add_argument('--reprint', action='store_true', help='Reprint existing permit (searches by plate + last 4 card digits)')
+    parser.add_argument('--refetch', action='store_true', help='Refetch existing permit (searches by plate + last 4 card digits)')
 
     args = parser.parse_args()
 
@@ -942,17 +942,17 @@ Examples:
 
         sys.exit(0)
 
-    # Reprint mode: search for existing permit and download PDF
-    if args.reprint:
-        print(bcolors.OKCYAN + "Reprint mode: Searching for existing permit..." + bcolors.ENDC)
+    # Refetch mode: search for existing permit and download PDF
+    if args.refetch:
+        print(bcolors.OKCYAN + "Refetch mode: Searching for existing permit..." + bcolors.ENDC)
 
-        result = reprint_permit(
+        result = refetch_permit(
             vehicle_index=args.vehicle,
             card_index=args.card
         )
 
         if result is None or result[0] is None or result[1] is None:
-            print(bcolors.FAIL + "Failed to reprint permit." + bcolors.ENDC)
+            print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
             sys.exit(1)
 
         vehical_name, vehical_plate = result
@@ -1006,12 +1006,12 @@ Examples:
                         asana_section_name = "Weekly Parking Pass todo"
                     )
 
-                print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (reprint)" + bcolors.ENDC)
+                print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
             else:
                 print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted. JSON file may be incomplete." + bcolors.ENDC)
                 sys.exit(1)
         else:
-            print(bcolors.FAIL + "No permit PDF found. Reprint failed." + bcolors.ENDC)
+            print(bcolors.FAIL + "No permit PDF found. Refetch failed." + bcolors.ENDC)
             sys.exit(1)
 
         sys.exit(0)
@@ -1020,7 +1020,7 @@ Examples:
     if args.vehicle is None:
         print("\n" + bcolors.WARNING + "What would you like to do?" + bcolors.ENDC)
         print(f"{bcolors.WARNING}1. {bcolors.OKCYAN}Buy new parking permit{bcolors.ENDC}")
-        print(f"{bcolors.WARNING}2. {bcolors.OKCYAN}Reprint existing permit{bcolors.ENDC}")
+        print(f"{bcolors.WARNING}2. {bcolors.OKCYAN}Refetch existing permit{bcolors.ENDC}")
 
         while True:
             try:
@@ -1028,14 +1028,14 @@ Examples:
                 if action == 1:
                     break  # Continue to normal buy flow
                 elif action == 2:
-                    # Switch to reprint mode
-                    result = reprint_permit(
+                    # Switch to refetch mode
+                    result = refetch_permit(
                         vehicle_index=args.vehicle,
                         card_index=args.card
                     )
 
                     if result is None or result[0] is None or result[1] is None:
-                        print(bcolors.FAIL + "Failed to reprint permit." + bcolors.ENDC)
+                        print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
                         sys.exit(1)
 
                     vehical_name, vehical_plate = result
@@ -1075,11 +1075,11 @@ Examples:
                                     asana_section_name = "Weekly Parking Pass todo"
                                 )
 
-                            print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (reprint)" + bcolors.ENDC)
+                            print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
                         else:
                             print(bcolors.FAIL + "\nMissing permit data - Asana task not created" + bcolors.ENDC)
                     else:
-                        print(bcolors.FAIL + "No permit PDF found. Reprint failed." + bcolors.ENDC)
+                        print(bcolors.FAIL + "No permit PDF found. Refetch failed." + bcolors.ENDC)
 
                     sys.exit(0)
                 else:
