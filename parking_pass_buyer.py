@@ -390,7 +390,6 @@ def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, 
     """
     import subprocess
     import shutil
-    import time
 
     # Use settings if not specified
     if target_repo_path is None:
@@ -677,9 +676,6 @@ def refetch_permit(vehicle_index=None, card_index=None):
             print(bcolors.OKCYAN + "Searching for permit..." + bcolors.ENDC)
 
         # Wait for PDF to auto-download (Chrome should download it automatically now)
-        import time
-        import glob
-
         print(bcolors.OKCYAN + "\nWaiting for PDF to download..." + bcolors.ENDC)
 
         # Wait for permit.pdf to appear (up to 30 seconds)
@@ -844,8 +840,27 @@ def get_parking_pass(vehicle_index=None, card_index=None):
 
         wait_for_xpath(driver, '//*[@id="maincontent"]/div[2]/div/div[1]/div/div[2]/div/div/div/div[3]/button').click()
 
+        # ===== Check for "permit already issued" error =====
+        time.sleep(2)  # Give page time to load
+        try:
+            # Check if we hit the "permit already issued" page
+            permit_exists = driver.find_elements(By.XPATH, "//*[contains(text(), 'permit for this vehicle for the same period has already been issued')]")
+            if permit_exists:
+                print(bcolors.WARNING + "\n" + "="*60 + bcolors.ENDC)
+                print(bcolors.WARNING + "A permit for this vehicle already exists for this period!" + bcolors.ENDC)
+                print(bcolors.OKCYAN + "Use the --refetch option to download the existing permit." + bcolors.ENDC)
+                print(bcolors.WARNING + "="*60 + "\n" + bcolors.ENDC)
+                log_event(f"Permit already exists for {selected_vehicle['plate']}", "WARNING")
+                return None, None
+        except Exception:
+            pass  # Continue if check fails
+
         # ===== Payment Page (iframe) =====
         iframe = wait_for_xpath(driver, '//*[@id="monerisCheckout-Frame"]')
+        if iframe is None:
+            print(bcolors.FAIL + "Payment page not found. The purchase may have failed." + bcolors.ENDC)
+            take_error_screenshot(driver, "payment_page_not_found")
+            return None, None
         driver.switch_to.frame(iframe)
 
         fill_input_field(driver, '//*[@id="cardholder"]', selected_payment_card["cardholder_name"], "cardholder_name")
@@ -864,9 +879,6 @@ def get_parking_pass(vehicle_index=None, card_index=None):
         driver.switch_to.default_content()
 
         # Wait for PDF to auto-download
-        import time
-        import glob
-
         print(bcolors.OKCYAN + "\nWaiting for PDF to download..." + bcolors.ENDC)
 
         # Wait for permit.pdf to appear (up to 30 seconds for payment processing)
