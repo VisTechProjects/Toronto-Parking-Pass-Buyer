@@ -851,7 +851,7 @@ def get_parking_pass(vehicle_index=None, card_index=None):
                 print(bcolors.OKCYAN + "Use the --refetch option to download the existing permit." + bcolors.ENDC)
                 print(bcolors.WARNING + "="*60 + "\n" + bcolors.ENDC)
                 log_event(f"Permit already exists for {selected_vehicle['plate']}", "WARNING")
-                return None, None
+                return "EXISTS", None  # Special return value for permit exists
         except Exception:
             pass  # Continue if check fails
 
@@ -1137,7 +1137,10 @@ Examples:
         card_index=args.card
     )
 
-    if result is None or result[0] is None or result[1] is None:
+    if result is None or result[1] is None:
+        if result and result[0] == "EXISTS":
+            # Permit already exists - not an error, just exit cleanly
+            sys.exit(0)
         print(bcolors.FAIL + "Failed to get parking pass." + bcolors.ENDC)
         sys.exit(1)
 
