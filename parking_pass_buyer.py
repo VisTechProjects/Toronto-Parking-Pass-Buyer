@@ -85,6 +85,35 @@ if missing:
     print(bcolors.FAIL + "Please set them and run again." + bcolors.ENDC)
     sys.exit(1)
 
+# ====== Load Settings ======
+def load_settings():
+    """Load settings from config/settings.json with defaults."""
+    settings_path = Path(__file__).parent / 'config' / 'settings.json'
+    defaults = {
+        "asana": {
+            "project_name": "Parking Pass",
+            "section_name": "Weekly Parking Pass todo"
+        },
+        "github": {
+            "display_repo_path": "../parking_pass_display",
+            "permit_branch": "permit"
+        }
+    }
+
+    if settings_path.exists():
+        try:
+            with open(settings_path, 'r') as f:
+                user_settings = json.load(f)
+            # Merge with defaults
+            for key in defaults:
+                if key in user_settings:
+                    defaults[key].update(user_settings[key])
+            return defaults
+        except Exception as e:
+            print(bcolors.WARNING + f"Warning: Could not load settings.json: {e}. Using defaults." + bcolors.ENDC)
+    return defaults
+
+settings = load_settings()
 
 # ====== Logging Setup ======
 def log_event(message, level="INFO"):
@@ -349,24 +378,27 @@ def archive_pdf(pdf_path):
 
     return archived_path
 
-def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, target_branch='permit'):
+def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, target_branch=None):
     """
     Commit and push permit.json to the parking_pass_display repo.
 
     Args:
         file_path: Path to permit.json
         commit_message: Commit message
-        target_repo_path: Path to parking_pass_display repo (defaults to ../parking_pass_display)
-        target_branch: Target branch (defaults to 'permit')
+        target_repo_path: Path to parking_pass_display repo (from settings.json)
+        target_branch: Target branch (from settings.json)
     """
     import subprocess
     import shutil
     import time
 
-    # Default to ../parking_pass_display if not specified
+    # Use settings if not specified
     if target_repo_path is None:
         current_dir = Path(__file__).parent
-        target_repo_path = current_dir.parent / 'parking_pass_display'
+        target_repo_path = current_dir / settings["github"]["display_repo_path"]
+
+    if target_branch is None:
+        target_branch = settings["github"]["permit_branch"]
 
     target_repo_path = Path(target_repo_path)
     original_dir = os.getcwd()
@@ -955,7 +987,7 @@ Examples:
             print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
             sys.exit(1)
 
-        vehical_name, vehical_plate = result
+        vehicle_name, vehicle_plate = result
 
         # Process the downloaded PDF
         print(bcolors.OKCYAN + "\n\n=== Processing Permit PDF ===" + bcolors.ENDC)
@@ -993,7 +1025,7 @@ Examples:
                 # Create Asana task if not disabled (only after successful PDF processing)
                 if not args.no_asana:
                     add_task_to_asana(
-                        task_name = f"Renew Parking Pass for {vehical_name} - {vehical_plate}",
+                        task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
                         task_notes = """<body>
                                 Renew parking pass for this *crap vehicle*
 
@@ -1002,8 +1034,8 @@ Examples:
                                 PS: If you forget again, future you will be very disappointed.
                             </body>""",
                         due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                        asana_project_name = "Parking Pass",
-                        asana_section_name = "Weekly Parking Pass todo"
+                        asana_project_name = settings["asana"]["project_name"],
+                        asana_section_name = settings["asana"]["section_name"]
                     )
 
                 print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
@@ -1038,7 +1070,7 @@ Examples:
                         print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
                         sys.exit(1)
 
-                    vehical_name, vehical_plate = result
+                    vehicle_name, vehicle_plate = result
 
                     # Process the downloaded PDF
                     print(bcolors.OKCYAN + "\n\n=== Processing Permit PDF ===" + bcolors.ENDC)
@@ -1068,11 +1100,11 @@ Examples:
 
                             if not args.no_asana:
                                 add_task_to_asana(
-                                    task_name = f"Renew Parking Pass for {vehical_name} - {vehical_plate}",
+                                    task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
                                     task_notes = """<body>Renew parking pass for this *crap vehicle*\n\n**Don't forget dumbass!**</body>""",
                                     due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                                    asana_project_name = "Parking Pass",
-                                    asana_section_name = "Weekly Parking Pass todo"
+                                    asana_project_name = settings["asana"]["project_name"],
+                                    asana_section_name = settings["asana"]["section_name"]
                                 )
 
                             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
@@ -1097,7 +1129,7 @@ Examples:
         print(bcolors.FAIL + "Failed to get parking pass." + bcolors.ENDC)
         sys.exit(1)
 
-    vehical_name, vehical_plate = result
+    vehicle_name, vehicle_plate = result
 
     # Process the downloaded PDF
     print(bcolors.OKCYAN + "\n\n=== Processing Permit PDF ===" + bcolors.ENDC)
@@ -1136,7 +1168,7 @@ Examples:
             # Create Asana task only after successful PDF processing
             if not args.no_asana:
                 add_task_to_asana(
-                    task_name = f"Renew Parking Pass for {vehical_name} - {vehical_plate}",
+                    task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
                     task_notes = """<body>
                             Renew parking pass for this *crap vehicle*
 
@@ -1145,8 +1177,8 @@ Examples:
                             PS: If you forget again, future you will be very disappointed.
                         </body>""",
                     due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                    asana_project_name = "Parking Pass",
-                    asana_section_name = "Weekly Parking Pass todo"
+                    asana_project_name = settings["asana"]["project_name"],
+                    asana_section_name = settings["asana"]["section_name"]
                 )
 
             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone" + bcolors.ENDC)
