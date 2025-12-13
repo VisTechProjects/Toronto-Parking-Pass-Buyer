@@ -608,6 +608,10 @@ def refetch_permit(vehicle_index=None, card_index=None):
         else:
             print(bcolors.FAIL + f"Invalid vehicle index: {vehicle_index}" + bcolors.ENDC)
             return None, None
+    elif len(info_cars) == 1:
+        # Only one vehicle, no need to ask
+        selected_vehicle = info_cars[0]
+        print(bcolors.OKGREEN + f"Using vehicle: {selected_vehicle['name']} - {selected_vehicle['plate']}" + bcolors.ENDC)
     else:
         print("\n" + bcolors.WARNING + "Which vehicle's permit would you like to refetch?" + bcolors.ENDC)
         for idx, vehicle in enumerate(info_cars):
@@ -733,6 +737,10 @@ def get_parking_pass(vehicle_index=None, card_index=None):
         else:
             print(bcolors.FAIL + f"Invalid vehicle index: {vehicle_index}" + bcolors.ENDC)
             return None, None
+    elif len(info_cars) == 1:
+        # Only one vehicle, no need to ask
+        selected_vehicle = info_cars[0]
+        print(bcolors.OKGREEN + f"Using vehicle: {selected_vehicle['name']} - {selected_vehicle['plate']}" + bcolors.ENDC)
     else:
         # Interactive mode
         print("\n" + bcolors.WARNING + "Which vehicle would you like to get a parking permit for?" + bcolors.ENDC)
