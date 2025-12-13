@@ -402,6 +402,9 @@ def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, 
     target_repo_path = Path(target_repo_path)
     original_dir = os.getcwd()
 
+    # Convert file_path to absolute path BEFORE changing directories
+    file_path = Path(file_path).resolve()
+
     try:
         # Check if target repo exists
         if not target_repo_path.exists():
@@ -629,6 +632,10 @@ def refetch_permit(vehicle_index=None, card_index=None):
         else:
             print(bcolors.FAIL + f"Invalid card index: {card_index}" + bcolors.ENDC)
             return None, None
+    elif len(info_payments) == 1:
+        # Only one card, no need to ask
+        selected_payment_card = info_payments[0]
+        print(bcolors.OKGREEN + f"Using payment card: {selected_payment_card['card_name']}" + bcolors.ENDC)
     else:
         print(bcolors.WARNING + "\nWhich card was used to purchase the permit?" + bcolors.ENDC)
         for idx, payment_card in enumerate(info_payments):
@@ -753,6 +760,10 @@ def get_parking_pass(vehicle_index=None, card_index=None):
         else:
             print(bcolors.FAIL + f"Invalid card index: {card_index}" + bcolors.ENDC)
             return None, None
+    elif len(info_payments) == 1:
+        # Only one card, no need to ask
+        selected_payment_card = info_payments[0]
+        print(bcolors.OKGREEN + f"Using payment card: {selected_payment_card['card_name']}" + bcolors.ENDC)
     else:
         # Interactive mode
         print(bcolors.WARNING + "\nWhich card would you like to use to pay for parking permit?" + bcolors.ENDC)
