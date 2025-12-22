@@ -837,7 +837,7 @@ def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana
     print(f" Task added to section: {section['name']}")
 
 # ====== Refetch Permit Workflow ======
-def refetch_permit(vehicle_index=None, card_index=None):
+def refetch_permit(vehicle_index=None, card_index=None, headless=False):
     """Navigate to permit search page, enter plate + last 4 card digits, and download the PDF."""
     url = "https://secure.toronto.ca/wes/eTPP/searchPermit.do?back=0"
 
@@ -948,9 +948,12 @@ def refetch_permit(vehicle_index=None, card_index=None):
             time.sleep(1)
 
         if not pdf_found:
-            print(bcolors.WARNING + "PDF not auto-downloaded. Waiting for manual download..." + bcolors.ENDC)
-            print(bcolors.HEADER + "Press " + bcolors.WARNING + "enter" + bcolors.HEADER + " when done..." + bcolors.ENDC)
-            input()
+            if headless:
+                log_event("PDF not auto-downloaded in headless mode - continuing anyway", "WARNING")
+            else:
+                print(bcolors.WARNING + "PDF not auto-downloaded. Waiting for manual download..." + bcolors.ENDC)
+                print(bcolors.HEADER + "Press " + bcolors.WARNING + "enter" + bcolors.HEADER + " when done..." + bcolors.ENDC)
+                input()
 
         return selected_vehicle['name'], selected_vehicle['plate']
 
@@ -1180,9 +1183,12 @@ def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headles
             time.sleep(1)
 
         if not pdf_found:
-            print(bcolors.WARNING + "PDF not auto-downloaded. Waiting for manual confirmation..." + bcolors.ENDC)
-            print(bcolors.HEADER + "Press " + bcolors.WARNING + "enter" + bcolors.HEADER + " when done..." + bcolors.ENDC)
-            input()
+            if headless:
+                log_event("PDF not auto-downloaded in headless mode - continuing anyway", "WARNING")
+            else:
+                print(bcolors.WARNING + "PDF not auto-downloaded. Waiting for manual confirmation..." + bcolors.ENDC)
+                print(bcolors.HEADER + "Press " + bcolors.WARNING + "enter" + bcolors.HEADER + " when done..." + bcolors.ENDC)
+                input()
 
         return selected_vehicle['name'], selected_vehicle['plate']
 
@@ -1304,7 +1310,8 @@ Examples:
 
         result = refetch_permit(
             vehicle_index=args.vehicle,
-            card_index=args.card
+            card_index=args.card,
+            headless=args.headless
         )
 
         if result is None or result[0] is None or result[1] is None:
@@ -1390,7 +1397,8 @@ Examples:
                     # Switch to refetch mode
                     result = refetch_permit(
                         vehicle_index=args.vehicle,
-                        card_index=args.card
+                        card_index=args.card,
+                        headless=args.headless
                     )
 
                     if result is None or result[0] is None or result[1] is None:
