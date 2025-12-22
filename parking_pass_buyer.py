@@ -4,6 +4,7 @@ import json
 import argparse
 import time
 import glob
+import socket
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -312,7 +313,8 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                     <!-- Footer -->
                     <tr>
                         <td align="center" style="background-color: #f8f9fa; padding: 20px; font-size: 12px; color: #999999;">
-                            Toronto Parking Pass Buyer - Automated
+                            Toronto Parking Pass Buyer - Automated<br>
+                            Sent from: {socket.gethostname()}
                         </td>
                     </tr>
                 </table>
@@ -384,7 +386,8 @@ def build_error_email_html(title, message, vehicle_info=None):
                     <!-- Footer -->
                     <tr>
                         <td align="center" style="background-color: #f8f9fa; padding: 20px; font-size: 12px; color: #999999;">
-                            Toronto Parking Pass Buyer - Automated
+                            Toronto Parking Pass Buyer - Automated<br>
+                            Sent from: {socket.gethostname()}
                         </td>
                     </tr>
                 </table>
