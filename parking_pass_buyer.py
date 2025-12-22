@@ -986,6 +986,10 @@ def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headles
         # Only one vehicle, no need to ask
         selected_vehicle = info_cars[0]
         print(bcolors.OKGREEN + f"Using vehicle: {selected_vehicle['name']} - {selected_vehicle['plate']}" + bcolors.ENDC)
+    elif headless:
+        # Headless mode with multiple vehicles - use first one
+        selected_vehicle = info_cars[0]
+        print(bcolors.WARNING + f"Headless mode: auto-selecting first vehicle: {selected_vehicle['name']} - {selected_vehicle['plate']}" + bcolors.ENDC)
     else:
         # Interactive mode
         print("\n" + bcolors.WARNING + "Which vehicle would you like to get a parking permit for?" + bcolors.ENDC)
@@ -1017,6 +1021,10 @@ def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headles
         # Only one card, no need to ask
         selected_payment_card = info_payments[0]
         print(bcolors.OKGREEN + f"Using payment card: {selected_payment_card['card_name']}" + bcolors.ENDC)
+    elif headless:
+        # Headless mode with multiple cards - use first one
+        selected_payment_card = info_payments[0]
+        print(bcolors.WARNING + f"Headless mode: auto-selecting first card: {selected_payment_card['card_name']}" + bcolors.ENDC)
     else:
         # Interactive mode
         print(bcolors.WARNING + "\nWhich card would you like to use to pay for parking permit?" + bcolors.ENDC)
