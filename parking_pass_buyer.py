@@ -1362,7 +1362,10 @@ Examples:
         sys.exit(0)
 
     # Interactive mode: ask user what they want to do
-    if args.vehicle is None:
+    # In headless mode, skip interactive menu and default to buy
+    if args.headless:
+        action = 1  # Auto-select buy in headless mode
+    elif args.vehicle is None:
         print("\n" + bcolors.WARNING + "What would you like to do?" + bcolors.ENDC)
         print(f"{bcolors.WARNING}1. {bcolors.OKCYAN}Buy new parking permit{bcolors.ENDC}")
         print(f"{bcolors.WARNING}2. {bcolors.OKCYAN}Refetch existing permit{bcolors.ENDC}")
