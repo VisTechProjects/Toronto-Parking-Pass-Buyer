@@ -51,6 +51,7 @@ class bcolors:
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # ====== Chrome Setup ======
+# Note: Headless mode is configured later after parsing args
 chrome_options = Options()
 chrome_options.add_argument("--start-maximized")
 chrome_options.add_argument("--disable-infobars")
@@ -71,6 +72,12 @@ chrome_options.add_experimental_option("prefs", {
 # ====== Environment Variables ======
 asana_access_token = os.getenv("asana_access_token")
 github_token = os.getenv("GITHUB_TOKEN")
+
+# Email settings (optional)
+email_from = os.getenv("EMAIL_FROM")
+email_to = os.getenv("EMAIL_TO")
+email_app_password = os.getenv("EMAIL_APP_PASSWORD")
+email_enabled = all([email_from, email_to, email_app_password])
 
 missing = []
 
@@ -116,13 +123,38 @@ def load_settings():
 settings = load_settings()
 
 # ====== Logging Setup ======
+LOGS_DIR = Path('logs')
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Create a new log file for this run
+RUN_TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+CURRENT_LOG_FILE = LOGS_DIR / f"run_{RUN_TIMESTAMP}.log"
+
+def cleanup_old_logs(max_age_days=90):
+    """Delete log files older than max_age_days."""
+    cutoff = datetime.now() - timedelta(days=max_age_days)
+    deleted_count = 0
+
+    for log_file in LOGS_DIR.glob("run_*.log"):
+        try:
+            # Parse timestamp from filename: run_YYYYMMDD_HHMMSS.log
+            file_date_str = log_file.stem.replace("run_", "")[:8]  # Get YYYYMMDD
+            file_date = datetime.strptime(file_date_str, "%Y%m%d")
+
+            if file_date < cutoff:
+                log_file.unlink()
+                deleted_count += 1
+        except (ValueError, OSError):
+            continue  # Skip files that don't match pattern or can't be deleted
+
+    return deleted_count
+
 def log_event(message, level="INFO"):
-    """Log events to permit_history.log with timestamp."""
-    log_file = Path('permit_history.log')
+    """Log events to current run's log file with timestamp."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_line = f"[{timestamp}] [{level}] {message}\n"
 
-    with open(log_file, 'a', encoding='utf-8') as f:
+    with open(CURRENT_LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(log_line)
 
     # Also print to console for immediate feedback
@@ -148,6 +180,219 @@ def take_error_screenshot(driver, error_name="error"):
     except Exception as e:
         log_event(f"Failed to take screenshot: {e}", "ERROR")
         return None
+
+# ====== Email Notification ======
+def send_email_notification(subject, body, is_error=False, html_body=None):
+    """Send email notification via Gmail SMTP. Attaches log file for errors."""
+    if not email_enabled or not email_from or not email_to or not email_app_password:
+        return False
+
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    try:
+        msg = MIMEMultipart('alternative')
+        msg['From'] = email_from
+        msg['To'] = email_to
+        msg['Subject'] = f"{'[ERROR] ' if is_error else ''}{subject}"
+
+        # Plain text version (fallback)
+        msg.attach(MIMEText(body, 'plain'))
+
+        # HTML version (if provided)
+        if html_body:
+            msg.attach(MIMEText(html_body, 'html'))
+
+        # Attach current run's log file for error emails
+        if is_error and CURRENT_LOG_FILE.exists():
+            with open(CURRENT_LOG_FILE, 'rb') as f:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{CURRENT_LOG_FILE.name}"')
+            msg.attach(part)
+
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(email_from, email_app_password)
+            server.send_message(msg)
+
+        log_event(f"Email notification sent: {subject}", "SUCCESS")
+        return True
+    except Exception as e:
+        log_event(f"Failed to send email: {e}", "ERROR")
+        return False
+
+
+def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success, asana_created):
+    """Build a mobile-friendly HTML email for successful permit purchase (Outlook compatible)."""
+    github_badge_bg = '#e8f5e9' if github_success else '#fff3e0'
+    github_badge_color = '#2e7d32' if github_success else '#e65100'
+    asana_badge_bg = '#e8f5e9' if asana_created else '#e3f2fd'
+    asana_badge_color = '#2e7d32' if asana_created else '#1565c0'
+
+    return f'''<!DOCTYPE html>
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--[if mso]>
+    <style type="text/css">
+        table {{border-collapse: collapse;}}
+        td {{padding: 0;}}
+    </style>
+    <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f5f5f5;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; max-width: 600px;">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="background-color: #2e7d32; padding: 30px 20px;">
+                            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff;">Permit Purchased!</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 30px 20px;">
+                            <!-- Permit Card -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8f9fa; border-left: 4px solid #4caf50;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <span style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px;">Permit Number</span><br>
+                                        <span style="font-size: 28px; font-weight: 700; color: #1a1a1a;">{permit_data['permit_number']}</span>
+                                    </td>
+                                </tr>
+                            </table>
+                            <!-- Info Table -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="padding: 12px 0; color: #666666; font-size: 14px; border-bottom: 1px solid #eeeeee; width: 40%;">Vehicle</td>
+                                    <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{vehicle_name}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; color: #666666; font-size: 14px; border-bottom: 1px solid #eeeeee;">Plate</td>
+                                    <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{vehicle_plate}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; color: #666666; font-size: 14px; border-bottom: 1px solid #eeeeee;">Valid From</td>
+                                    <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{permit_data['valid_from']}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; color: #666666; font-size: 14px; border-bottom: 1px solid #eeeeee;">Valid To</td>
+                                    <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{permit_data['valid_to']}</td>
+                                </tr>
+                            </table>
+                            <!-- Status Badges -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="padding: 6px 12px; background-color: {github_badge_bg}; color: {github_badge_color}; font-size: 12px; font-weight: 500; border-radius: 20px;">
+                                        GitHub: {'Pushed' if github_success else 'Failed'}
+                                    </td>
+                                    <td width="8"></td>
+                                    <td style="padding: 6px 12px; background-color: {asana_badge_bg}; color: {asana_badge_color}; font-size: 12px; font-weight: 500; border-radius: 20px;">
+                                        Asana: {'Created' if asana_created else 'Skipped'}
+                                    </td>
+                                </tr>
+                            </table>
+                            <!-- Reminder -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="background-color: #e3f2fd; padding: 15px; font-size: 14px; color: #1565c0; border-left: 4px solid #1976d2;">
+                                        Plug in the permit display to update it with the new permit info.
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center" style="background-color: #f8f9fa; padding: 20px; font-size: 12px; color: #999999;">
+                            Toronto Parking Pass Buyer - Automated
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>'''
+
+
+def build_error_email_html(title, message, vehicle_info=None):
+    """Build a mobile-friendly HTML email for errors (Outlook compatible)."""
+    vehicle_row = ""
+    if vehicle_info:
+        vehicle_row = f'''
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="padding: 12px 0; color: #666666; font-size: 14px; border-bottom: 1px solid #eeeeee; width: 40%;">Vehicle</td>
+                                    <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{vehicle_info}</td>
+                                </tr>
+                            </table>'''
+
+    return f'''<!DOCTYPE html>
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--[if mso]>
+    <style type="text/css">
+        table {{border-collapse: collapse;}}
+        td {{padding: 0;}}
+    </style>
+    <![endif]-->
+</head>
+<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f5f5f5;">
+        <tr>
+            <td align="center" style="padding: 20px 0;">
+                <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffffff; max-width: 600px;">
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" style="background-color: #c62828; padding: 30px 20px;">
+                            <span style="font-size: 48px; color: #ffffff;">&#9888;</span>
+                            <h1 style="margin: 10px 0 0 0; font-size: 24px; font-weight: 600; color: #ffffff;">{title}</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 30px 20px;">
+                            <!-- Error Card -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #ffebee; border-left: 4px solid #c62828;">
+                                <tr>
+                                    <td style="padding: 20px; color: #1a1a1a; font-size: 16px; line-height: 1.5;">
+                                        {message}
+                                    </td>
+                                </tr>
+                            </table>
+                            {vehicle_row}
+                            <!-- Note -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="background-color: #fff3e0; padding: 15px; font-size: 14px; color: #e65100;">
+                                        &#128206; Log file attached for debugging
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center" style="background-color: #f8f9fa; padding: 20px; font-size: 12px; color: #999999;">
+                            Toronto Parking Pass Buyer - Automated
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>'''
 
 # ====== Helper Functions ======
 def wait_for_xpath(driver, xpath, timeout=10, visible=False):
@@ -716,7 +961,7 @@ def refetch_permit(vehicle_index=None, card_index=None):
         driver.quit()
 
 # ====== Main Automation Workflow ======
-def get_parking_pass(vehicle_index=None, card_index=None):
+def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headless=False):
     url = "https://secure.toronto.ca/wes/eTPP/welcome.do"
 
     # Load data
@@ -887,6 +1132,19 @@ def get_parking_pass(vehicle_index=None, card_index=None):
         fill_input_field(driver, '//*[@id="expiry_date"]', selected_payment_card["card_expiry"], "card_expiry")
         fill_input_field(driver, '//*[@id="cvv"]', selected_payment_card["card_CVV"], "card_CVV")
 
+        # Dry run mode: stop before payment
+        if dry_run:
+            print(bcolors.WARNING + "\n" + "="*60 + bcolors.ENDC)
+            print(bcolors.WARNING + "DRY RUN: Stopping before payment submission" + bcolors.ENDC)
+            print(bcolors.OKGREEN + "All forms filled successfully!" + bcolors.ENDC)
+            print(bcolors.OKCYAN + "Payment form is ready but NOT submitted." + bcolors.ENDC)
+            print(bcolors.WARNING + "="*60 + "\n" + bcolors.ENDC)
+            log_event(f"Dry run completed for {selected_vehicle['name']} ({selected_vehicle['plate']})", "SUCCESS")
+            # Only prompt if running interactively and not headless
+            if not headless and sys.stdin.isatty():
+                input(bcolors.HEADER + "Press enter to close browser..." + bcolors.ENDC)
+            return "DRY_RUN", None
+
         # Click the Pay button
         print(bcolors.OKCYAN + "\nSubmitting payment..." + bcolors.ENDC)
         pay_btn = wait_for_xpath(driver, '//*[@id="process"]', visible=True)
@@ -921,6 +1179,11 @@ def get_parking_pass(vehicle_index=None, card_index=None):
         driver.quit()
 
 if __name__ == "__main__":
+    # Clean up old log files (older than 90 days)
+    deleted = cleanup_old_logs(max_age_days=90)
+    if deleted > 0:
+        log_event(f"Cleaned up {deleted} old log file(s)", "INFO")
+
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description='Toronto Parking Pass Buyer - Automated parking permit purchase',
@@ -944,6 +1207,12 @@ Examples:
 
   # Refetch existing permit (search by plate + card)
   python parking_pass_buyer.py --refetch --vehicle 0 --card 0
+
+  # Headless mode for server/cron automation (no browser window)
+  python parking_pass_buyer.py --vehicle 0 --card 0 --headless
+
+  # Dry run: test all steps without making a purchase
+  python parking_pass_buyer.py --vehicle 0 --card 0 --dry-run
         '''
     )
 
@@ -954,8 +1223,21 @@ Examples:
     parser.add_argument('--parse-only', action='store_true', help='Only parse existing PDF without buying new permit')
     parser.add_argument('--pdf', type=str, help='Path to specific PDF file to parse (use with --parse-only)')
     parser.add_argument('--refetch', action='store_true', help='Refetch existing permit (searches by plate + last 4 card digits)')
+    parser.add_argument('--headless', action='store_true', help='Run Chrome in headless mode (for server/cron automation)')
+    parser.add_argument('--dry-run', action='store_true', help='Test run: fill forms but stop before payment (no purchase)')
 
     args = parser.parse_args()
+
+    # Configure headless mode if requested
+    if args.headless:
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        print(bcolors.OKCYAN + "Running in headless mode (no browser window)" + bcolors.ENDC)
 
     # Parse-only mode: just process existing PDF
     if args.parse_only:
@@ -1153,14 +1435,61 @@ Examples:
     # Normal mode: buy permit
     result = get_parking_pass(
         vehicle_index=args.vehicle,
-        card_index=args.card
+        card_index=args.card,
+        dry_run=args.dry_run,
+        headless=args.headless
     )
 
     if result is None or result[1] is None:
         if result and result[0] == "EXISTS":
             # Permit already exists - not an error, just exit cleanly
             sys.exit(0)
+        if result and result[0] == "DRY_RUN":
+            # Dry run completed successfully - now test PDF processing with old permit
+            print(bcolors.OKGREEN + "\nDry run complete - no purchase was made." + bcolors.ENDC)
+            print(bcolors.OKCYAN + "\nTesting PDF processing with old permit..." + bcolors.ENDC)
+
+            # Find most recent PDF in old_permits folder
+            old_permits_dir = Path('old_permits')
+            if old_permits_dir.exists():
+                old_pdfs = list(old_permits_dir.glob("*.pdf"))
+                if old_pdfs:
+                    test_pdf = max(old_pdfs, key=lambda f: f.stat().st_mtime)
+                    print(bcolors.OKGREEN + f"Using test PDF: {test_pdf}" + bcolors.ENDC)
+
+                    # Extract and parse
+                    text = extract_text_from_pdf(test_pdf)
+                    permit_data = parse_permit_data(text)
+
+                    # Display extracted data
+                    print(bcolors.OKCYAN + "\nExtracted permit data:" + bcolors.ENDC)
+                    for key, value in permit_data.items():
+                        status = bcolors.OKGREEN if value else bcolors.FAIL
+                        print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
+
+                    if all(permit_data.values()):
+                        # Create JSON (but mark it as a test)
+                        json_path = Path('permit.json')
+                        create_permit_json(permit_data, json_path)
+                        print(bcolors.WARNING + "\nDRY RUN: permit.json created locally (not pushed to GitHub)" + bcolors.ENDC)
+                    else:
+                        print(bcolors.FAIL + "\nSome permit data could not be extracted from test PDF" + bcolors.ENDC)
+                else:
+                    print(bcolors.WARNING + "No PDFs found in old_permits/ folder" + bcolors.ENDC)
+            else:
+                print(bcolors.WARNING + "old_permits/ folder not found" + bcolors.ENDC)
+
+            sys.exit(0)
         print(bcolors.FAIL + "Failed to get parking pass." + bcolors.ENDC)
+        send_email_notification(
+            subject="Parking Permit FAILED",
+            body="Failed to purchase parking permit.\n\nCheck the server logs for details.",
+            is_error=True,
+            html_body=build_error_email_html(
+                "Purchase Failed",
+                "Failed to purchase parking permit. The automation encountered an error before completing the purchase."
+            )
+        )
         sys.exit(1)
 
     vehicle_name, vehicle_plate = result
@@ -1216,10 +1545,49 @@ Examples:
                 )
 
             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone" + bcolors.ENDC)
+
+            # Send success email
+            send_email_notification(
+                subject=f"Parking Permit Purchased - {vehicle_plate}",
+                body=f"""Parking permit successfully purchased!
+
+Vehicle: {vehicle_name} ({vehicle_plate})
+Permit Number: {permit_data['permit_number']}
+Valid From: {permit_data['valid_from']}
+Valid To: {permit_data['valid_to']}
+
+GitHub Push: {'Success' if github_success else 'Failed'}
+Asana Task: {'Created' if not args.no_asana else 'Skipped'}
+""",
+                html_body=build_success_email_html(
+                    vehicle_name, vehicle_plate, permit_data,
+                    github_success, not args.no_asana
+                )
+            )
         else:
             print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted. Asana task not created." + bcolors.ENDC)
+            send_email_notification(
+                subject=f"Parking Permit Warning - {vehicle_plate}",
+                body=f"Permit was purchased but PDF parsing failed.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
+                is_error=True,
+                html_body=build_error_email_html(
+                    "PDF Parsing Failed",
+                    "Permit was purchased but the PDF could not be parsed. Please check manually.",
+                    f"{vehicle_name} ({vehicle_plate})"
+                )
+            )
     else:
         print(bcolors.FAIL + "No permit PDF found. Asana task not created." + bcolors.ENDC)
+        send_email_notification(
+            subject=f"Parking Permit Error - {vehicle_plate}",
+            body=f"Permit may have been purchased but no PDF was found.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
+            is_error=True,
+            html_body=build_error_email_html(
+                "No PDF Found",
+                "Permit may have been purchased but no PDF was downloaded. Please check manually.",
+                f"{vehicle_name} ({vehicle_plate})"
+            )
+        )
 
     print(bcolors.HEADER + bcolors.UNDERLINE + "\n\nWhy did I waste my life making this...\n\n" + bcolors.ENDC)
     print(bcolors.OKCYAN + "Remember: Parking is temporary, but sarcasm is forever." + bcolors.ENDC)
