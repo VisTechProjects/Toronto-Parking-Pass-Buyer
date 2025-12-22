@@ -26,6 +26,14 @@ except ImportError:
     import PyPDF2
     from dotenv import load_dotenv
 
+# Try to import curl_cffi for fast API-based refetch
+try:
+    from curl_cffi import requests as curl_requests
+    CURL_CFFI_AVAILABLE = True
+except ImportError:
+    curl_requests = None  # type: ignore
+    CURL_CFFI_AVAILABLE = False
+
 load_dotenv('.env')  # Load environment variables from .env file
 
 from selenium import webdriver
@@ -848,7 +856,123 @@ def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana
 
     print(f" Task added to section: {section['name']}")
 
-# ====== Refetch Permit Workflow ======
+# ====== API-based Refetch (Fast) ======
+def refetch_permit_api(vehicle_index=None, card_index=None):
+    """
+    Refetch permit using direct API calls (curl_cffi).
+    Much faster than Selenium (~4s vs ~20s).
+    Returns (vehicle_name, vehicle_plate, pdf_path) or (None, None, None) on failure.
+    """
+    import re
+
+    if not CURL_CFFI_AVAILABLE:
+        print(bcolors.WARNING + "curl_cffi not available, falling back to Selenium" + bcolors.ENDC)
+        return None, None, None
+
+    # Load data
+    with open('config/info_payment_cards.json', 'r') as file:
+        info_payments = json.load(file)
+
+    with open('config/info_cars.json', 'r') as file:
+        info_cars = json.load(file)
+
+    # Select vehicle
+    if vehicle_index is not None:
+        if 0 <= vehicle_index < len(info_cars):
+            selected_vehicle = info_cars[vehicle_index]
+        else:
+            print(bcolors.FAIL + f"Invalid vehicle index: {vehicle_index}" + bcolors.ENDC)
+            return None, None, None
+    elif len(info_cars) == 1:
+        selected_vehicle = info_cars[0]
+    else:
+        print(bcolors.FAIL + "API refetch requires --vehicle index in non-interactive mode" + bcolors.ENDC)
+        return None, None, None
+
+    # Select payment card
+    if card_index is not None:
+        if 0 <= card_index < len(info_payments):
+            selected_payment_card = info_payments[card_index]
+        else:
+            print(bcolors.FAIL + f"Invalid card index: {card_index}" + bcolors.ENDC)
+            return None, None, None
+    elif len(info_payments) == 1:
+        selected_payment_card = info_payments[0]
+    else:
+        print(bcolors.FAIL + "API refetch requires --card index in non-interactive mode" + bcolors.ENDC)
+        return None, None, None
+
+    last_4_digits = str(selected_payment_card["card_number"])[-4:]
+
+    print(bcolors.OKCYAN + f"API Refetch: {selected_vehicle['name']} ({selected_vehicle['plate']})" + bcolors.ENDC)
+    log_event(f"Starting API refetch for {selected_vehicle['name']} ({selected_vehicle['plate']})")
+
+    try:
+        if curl_requests is None:
+            return None, None, None
+        session = curl_requests.Session(impersonate="chrome")
+
+        # Step 1: Load search page to get Struts token
+        print(bcolors.OKCYAN + "  Loading search page..." + bcolors.ENDC)
+        resp = session.get("https://secure.toronto.ca/wes/eTPP/searchPermit.do?back=0", timeout=30)
+
+        if resp.status_code != 200:
+            log_event(f"API refetch failed: search page returned {resp.status_code}", "ERROR")
+            return None, None, None
+
+        # Extract Struts token
+        token_match = re.search(r'name="org\.apache\.struts\.taglib\.html\.TOKEN"\s+value="([^"]+)"', resp.text)
+        if not token_match:
+            log_event("API refetch failed: no Struts token found", "ERROR")
+            return None, None, None
+
+        struts_token = token_match.group(1)
+
+        # Step 2: Submit search form
+        print(bcolors.OKCYAN + "  Searching for permit..." + bcolors.ENDC)
+        search_data = {
+            "org.apache.struts.taglib.html.TOKEN": struts_token,
+            "search": "search",
+            "licPltNum": selected_vehicle['plate'],
+            "provCode": "ON",
+            "creditCardType": "V",  # Visa - TODO: detect from card type
+            "creditCardNum": last_4_digits,
+        }
+
+        resp = session.post(
+            "https://secure.toronto.ca/wes/eTPP/searchPermit.do",
+            data=search_data,
+            timeout=30
+        )
+
+        # Check if we got a PDF
+        if resp.headers.get('Content-Type', '').startswith('application/pdf'):
+            pdf_path = Path(download_dir) / f"permit_{selected_vehicle['plate']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            with open(pdf_path, 'wb') as f:
+                f.write(resp.content)
+
+            print(bcolors.OKGREEN + f"  PDF downloaded: {pdf_path}" + bcolors.ENDC)
+            log_event(f"API refetch successful: {pdf_path}", "SUCCESS")
+
+            return selected_vehicle['name'], selected_vehicle['plate'], pdf_path
+
+        else:
+            # Check for error messages
+            if "No matching permit" in resp.text or "no permit" in resp.text.lower():
+                print(bcolors.WARNING + "  No permit found for this plate/card combination" + bcolors.ENDC)
+                log_event("API refetch: no permit found", "WARNING")
+            else:
+                log_event(f"API refetch failed: unexpected response (Content-Type: {resp.headers.get('Content-Type')})", "ERROR")
+
+            return None, None, None
+
+    except Exception as e:
+        log_event(f"API refetch error: {e}", "ERROR")
+        print(bcolors.FAIL + f"  API error: {e}" + bcolors.ENDC)
+        return None, None, None
+
+
+# ====== Refetch Permit Workflow (Selenium) ======
 def refetch_permit(vehicle_index=None, card_index=None, headless=False):
     """Navigate to permit search page, enter plate + last 4 card digits, and download the PDF."""
     url = "https://secure.toronto.ca/wes/eTPP/searchPermit.do?back=0"
@@ -1336,21 +1460,39 @@ Examples:
     if args.refetch:
         print(bcolors.OKCYAN + "Refetch mode: Searching for existing permit..." + bcolors.ENDC)
 
-        result = refetch_permit(
-            vehicle_index=args.vehicle,
-            card_index=args.card,
-            headless=args.headless
-        )
+        # Try fast API-based refetch first
+        pdf_path = None
+        vehicle_name = None
+        vehicle_plate = None
 
-        if result is None or result[0] is None or result[1] is None:
-            print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
-            sys.exit(1)
+        if CURL_CFFI_AVAILABLE and args.vehicle is not None:
+            print(bcolors.OKCYAN + "Trying fast API refetch..." + bcolors.ENDC)
+            api_result = refetch_permit_api(
+                vehicle_index=args.vehicle,
+                card_index=args.card
+            )
+            if api_result[0] is not None:
+                vehicle_name, vehicle_plate, pdf_path = api_result
+            else:
+                print(bcolors.WARNING + "API refetch failed, falling back to Selenium..." + bcolors.ENDC)
 
-        vehicle_name, vehicle_plate = result
+        # Fall back to Selenium if API didn't work
+        if pdf_path is None:
+            result = refetch_permit(
+                vehicle_index=args.vehicle,
+                card_index=args.card,
+                headless=args.headless
+            )
+
+            if result is None or result[0] is None or result[1] is None:
+                print(bcolors.FAIL + "Failed to refetch permit." + bcolors.ENDC)
+                sys.exit(1)
+
+            vehicle_name, vehicle_plate = result
+            pdf_path = find_permit_pdf('.')
 
         # Process the downloaded PDF
         print(bcolors.OKCYAN + "\n\n=== Processing Permit PDF ===" + bcolors.ENDC)
-        pdf_path = find_permit_pdf('.')
 
         if pdf_path:
             print(bcolors.OKGREEN + f"Found PDF: {pdf_path}" + bcolors.ENDC)
