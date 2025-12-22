@@ -199,6 +199,9 @@ def send_email_notification(subject, body, is_error=False, html_body=None):
         msg['From'] = email_from
         msg['To'] = email_to
         msg['Subject'] = f"{'[ERROR] ' if is_error else ''}{subject}"
+        msg['X-Priority'] = '1'  # High priority
+        msg['X-MSMail-Priority'] = 'High'
+        msg['Importance'] = 'High'
 
         # Plain text version (fallback)
         msg.attach(MIMEText(body, 'plain'))
