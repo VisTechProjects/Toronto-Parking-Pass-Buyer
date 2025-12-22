@@ -10,3 +10,4 @@ permit_history.log
 buy_*.bat
 /error_screenshots
 /testing
+CLAUDE.md

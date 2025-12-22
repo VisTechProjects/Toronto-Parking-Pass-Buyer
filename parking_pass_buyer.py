@@ -183,8 +183,8 @@ def take_error_screenshot(driver, error_name="error"):
         return None
 
 # ====== Email Notification ======
-def send_email_notification(subject, body, is_error=False, html_body=None):
-    """Send email notification via Gmail SMTP. Attaches log file for errors."""
+def send_email_notification(subject, body, is_error=False, html_body=None, screenshot_path=None):
+    """Send email notification via Gmail SMTP. Attaches log file and screenshot for errors."""
     if not email_enabled or not email_from or not email_to or not email_app_password:
         return False
 
@@ -217,6 +217,15 @@ def send_email_notification(subject, body, is_error=False, html_body=None):
                 part.set_payload(f.read())
             encoders.encode_base64(part)
             part.add_header('Content-Disposition', f'attachment; filename="{CURRENT_LOG_FILE.name}"')
+            msg.attach(part)
+
+        # Attach screenshot if provided
+        if screenshot_path and Path(screenshot_path).exists():
+            with open(screenshot_path, 'rb') as f:
+                part = MIMEBase('image', 'png')
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f'attachment; filename="{Path(screenshot_path).name}"')
             msg.attach(part)
 
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
@@ -1169,8 +1178,22 @@ def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headles
             pay_btn.click()
             print(bcolors.OKGREEN + "Payment submitted, waiting for confirmation..." + bcolors.ENDC)
 
-        # Switch back to main content to wait for PDF
+        # Switch back to main content to check for payment result
         driver.switch_to.default_content()
+
+        # Wait for payment processing and page redirect
+        time.sleep(5)
+
+        # Check for payment declined on the main Toronto page
+        try:
+            page_text = driver.page_source.lower()
+            if "payment declined" in page_text:
+                log_event("Payment declined detected on Toronto page", "ERROR")
+                print(bcolors.FAIL + "Payment Declined!" + bcolors.ENDC)
+                take_error_screenshot(driver, "payment_declined")
+                return "PAYMENT_DECLINED", "Payment was declined."
+        except Exception as e:
+            log_event(f"Error checking for payment declined: {e}", "WARNING")
 
         # Wait for PDF to auto-download
         print(bcolors.OKCYAN + "\nWaiting for PDF to download..." + bcolors.ENDC)
@@ -1188,10 +1211,12 @@ def get_parking_pass(vehicle_index=None, card_index=None, dry_run=False, headles
         if not pdf_found:
             if headless:
                 log_event("PDF not auto-downloaded in headless mode - continuing anyway", "WARNING")
-            else:
+            elif sys.stdin.isatty():
                 print(bcolors.WARNING + "PDF not auto-downloaded. Waiting for manual confirmation..." + bcolors.ENDC)
                 print(bcolors.HEADER + "Press " + bcolors.WARNING + "enter" + bcolors.HEADER + " when done..." + bcolors.ENDC)
                 input()
+            else:
+                log_event("PDF not auto-downloaded, non-interactive mode - continuing anyway", "WARNING")
 
         return selected_vehicle['name'], selected_vehicle['plate']
 
@@ -1465,47 +1490,85 @@ Examples:
         headless=args.headless
     )
 
-    if result is None or result[1] is None:
-        if result and result[0] == "EXISTS":
-            # Permit already exists - not an error, just exit cleanly
-            sys.exit(0)
-        if result and result[0] == "DRY_RUN":
-            # Dry run completed successfully - now test PDF processing with old permit
-            print(bcolors.OKGREEN + "\nDry run complete - no purchase was made." + bcolors.ENDC)
-            print(bcolors.OKCYAN + "\nTesting PDF processing with old permit..." + bcolors.ENDC)
+    # Check for special return values first
+    if result and result[0] == "EXISTS":
+        # Permit already exists - not an error, just exit cleanly
+        sys.exit(0)
 
-            # Find most recent PDF in old_permits folder
-            old_permits_dir = Path('old_permits')
-            if old_permits_dir.exists():
-                old_pdfs = list(old_permits_dir.glob("*.pdf"))
-                if old_pdfs:
-                    test_pdf = max(old_pdfs, key=lambda f: f.stat().st_mtime)
-                    print(bcolors.OKGREEN + f"Using test PDF: {test_pdf}" + bcolors.ENDC)
+    if result and result[0] == "PAYMENT_DECLINED":
+        # Payment was declined
+        error_details = result[1] if result[1] else "Unknown payment error"
+        print(bcolors.FAIL + f"Payment declined: {error_details}" + bcolors.ENDC)
 
-                    # Extract and parse
-                    text = extract_text_from_pdf(test_pdf)
-                    permit_data = parse_permit_data(text)
+        # Find the most recent payment_declined screenshot
+        screenshot_path = None
+        screenshot_dir = Path('error_screenshots')
+        if screenshot_dir.exists():
+            screenshots = list(screenshot_dir.glob("payment_declined_*.png"))
+            if screenshots:
+                screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
 
-                    # Display extracted data
-                    print(bcolors.OKCYAN + "\nExtracted permit data:" + bcolors.ENDC)
-                    for key, value in permit_data.items():
-                        status = bcolors.OKGREEN if value else bcolors.FAIL
-                        print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
+        send_email_notification(
+            subject="Parking Permit PAYMENT DECLINED",
+            body=f"Payment was declined when trying to purchase parking permit.\n\nPlease try again manually or use a different card.",
+            is_error=True,
+            html_body=build_error_email_html(
+                "Payment Declined",
+                "Payment was declined when trying to purchase parking permit.<br><br>Please try again manually or use a different card."
+            ),
+            screenshot_path=screenshot_path
+        )
+        sys.exit(1)
 
-                    if all(permit_data.values()):
-                        # Create JSON (but mark it as a test)
-                        json_path = Path('permit.json')
-                        create_permit_json(permit_data, json_path)
-                        print(bcolors.WARNING + "\nDRY RUN: permit.json created locally (not pushed to GitHub)" + bcolors.ENDC)
-                    else:
-                        print(bcolors.FAIL + "\nSome permit data could not be extracted from test PDF" + bcolors.ENDC)
+    if result and result[0] == "DRY_RUN":
+        # Dry run completed successfully - now test PDF processing with old permit
+        print(bcolors.OKGREEN + "\nDry run complete - no purchase was made." + bcolors.ENDC)
+        print(bcolors.OKCYAN + "\nTesting PDF processing with old permit..." + bcolors.ENDC)
+
+        # Find most recent PDF in old_permits folder
+        old_permits_dir = Path('old_permits')
+        if old_permits_dir.exists():
+            old_pdfs = list(old_permits_dir.glob("*.pdf"))
+            if old_pdfs:
+                test_pdf = max(old_pdfs, key=lambda f: f.stat().st_mtime)
+                print(bcolors.OKGREEN + f"Using test PDF: {test_pdf}" + bcolors.ENDC)
+
+                # Extract and parse
+                text = extract_text_from_pdf(test_pdf)
+                permit_data = parse_permit_data(text)
+
+                # Display extracted data
+                print(bcolors.OKCYAN + "\nExtracted permit data:" + bcolors.ENDC)
+                for key, value in permit_data.items():
+                    status = bcolors.OKGREEN if value else bcolors.FAIL
+                    print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
+
+                if all(permit_data.values()):
+                    # Create JSON (but mark it as a test)
+                    json_path = Path('permit.json')
+                    create_permit_json(permit_data, json_path)
+                    print(bcolors.WARNING + "\nDRY RUN: permit.json created locally (not pushed to GitHub)" + bcolors.ENDC)
                 else:
-                    print(bcolors.WARNING + "No PDFs found in old_permits/ folder" + bcolors.ENDC)
+                    print(bcolors.FAIL + "\nSome permit data could not be extracted from test PDF" + bcolors.ENDC)
             else:
-                print(bcolors.WARNING + "old_permits/ folder not found" + bcolors.ENDC)
+                print(bcolors.WARNING + "No PDFs found in old_permits/ folder" + bcolors.ENDC)
+        else:
+            print(bcolors.WARNING + "old_permits/ folder not found" + bcolors.ENDC)
 
-            sys.exit(0)
+        sys.exit(0)
+
+    # Check for general failure
+    if result is None or result[1] is None:
         print(bcolors.FAIL + "Failed to get parking pass." + bcolors.ENDC)
+
+        # Find the most recent error screenshot
+        screenshot_path = None
+        screenshot_dir = Path('error_screenshots')
+        if screenshot_dir.exists():
+            screenshots = list(screenshot_dir.glob("*.png"))
+            if screenshots:
+                screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
+
         send_email_notification(
             subject="Parking Permit FAILED",
             body="Failed to purchase parking permit.\n\nCheck the server logs for details.",
@@ -1513,7 +1576,8 @@ Examples:
             html_body=build_error_email_html(
                 "Purchase Failed",
                 "Failed to purchase parking permit. The automation encountered an error before completing the purchase."
-            )
+            ),
+            screenshot_path=screenshot_path
         )
         sys.exit(1)
 
@@ -1603,6 +1667,15 @@ Asana Task: {'Created' if not args.no_asana else 'Skipped'}
             )
     else:
         print(bcolors.FAIL + "No permit PDF found. Asana task not created." + bcolors.ENDC)
+
+        # Find the most recent error screenshot (if any)
+        screenshot_path = None
+        screenshot_dir = Path('error_screenshots')
+        if screenshot_dir.exists():
+            screenshots = list(screenshot_dir.glob("*.png"))
+            if screenshots:
+                screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
+
         send_email_notification(
             subject=f"Parking Permit Error - {vehicle_plate}",
             body=f"Permit may have been purchased but no PDF was found.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
@@ -1611,10 +1684,13 @@ Asana Task: {'Created' if not args.no_asana else 'Skipped'}
                 "No PDF Found",
                 "Permit may have been purchased but no PDF was downloaded. Please check manually.",
                 f"{vehicle_name} ({vehicle_plate})"
-            )
+            ),
+            screenshot_path=screenshot_path
         )
 
     print(bcolors.HEADER + bcolors.UNDERLINE + "\n\nWhy did I waste my life making this...\n\n" + bcolors.ENDC)
     print(bcolors.OKCYAN + "Remember: Parking is temporary, but sarcasm is forever." + bcolors.ENDC)
 
-    input(bcolors.HEADER + "\nPress enter to exit..." + bcolors.ENDC)
+    # Only prompt for enter in interactive mode
+    if not args.headless and sys.stdin.isatty():
+        input(bcolors.HEADER + "\nPress enter to exit..." + bcolors.ENDC)
