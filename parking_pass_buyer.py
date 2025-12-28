@@ -1630,7 +1630,7 @@ Examples:
     if pdf_path:
         print(bcolors.OKGREEN + f"Found PDF: {pdf_path}" + bcolors.ENDC)
 
-        # Extract text and parse
+        # Extract text and parse (with retry)
         text = extract_text_from_pdf(pdf_path)
         permit_data = parse_permit_data(text)
 
@@ -1639,6 +1639,18 @@ Examples:
         for key, value in permit_data.items():
             status = bcolors.OKGREEN if value else bcolors.FAIL
             print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
+
+        # Retry parsing once if it failed
+        if not all(permit_data.values()):
+            print(bcolors.WARNING + "\nPDF parsing incomplete, retrying..." + bcolors.ENDC)
+            time.sleep(2)
+            text = extract_text_from_pdf(pdf_path)
+            permit_data = parse_permit_data(text)
+
+            print(bcolors.OKCYAN + "\nRetry - Extracted permit data:" + bcolors.ENDC)
+            for key, value in permit_data.items():
+                status = bcolors.OKGREEN if value else bcolors.FAIL
+                print(f"  {status}{key}: {value or 'NOT FOUND'}{bcolors.ENDC}")
 
         # Create permit.json if we got all data
         if all(permit_data.values()):
