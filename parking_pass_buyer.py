@@ -12,7 +12,6 @@ from pathlib import Path
 try:
     import selenium
     import webdriver_manager
-    import asana
     import pdfplumber
     import PyPDF2
     from dotenv import load_dotenv
@@ -21,7 +20,6 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
     import selenium
     import webdriver_manager
-    import asana
     import pdfplumber
     import PyPDF2
     from dotenv import load_dotenv
@@ -79,7 +77,6 @@ chrome_options.add_experimental_option("prefs", {
 })
 
 # ====== Environment Variables ======
-asana_access_token = os.getenv("asana_access_token")
 github_token = os.getenv("GITHUB_TOKEN")
 
 # Email settings (optional)
@@ -89,9 +86,6 @@ email_app_password = os.getenv("EMAIL_APP_PASSWORD")
 email_enabled = all([email_from, email_to, email_app_password])
 
 missing = []
-
-if not asana_access_token:
-    missing.append("asana_access_token")
 
 if not github_token:
     missing.append("GITHUB_TOKEN")
@@ -106,10 +100,6 @@ def load_settings():
     """Load settings from config/settings.json with defaults."""
     settings_path = Path(__file__).parent / 'config' / 'settings.json'
     defaults = {
-        "asana": {
-            "project_name": "Parking Pass",
-            "section_name": "Weekly Parking Pass todo"
-        },
         "github": {
             "display_repo_path": "../parking_pass_display",
             "permit_branch": "permit"
@@ -247,12 +237,10 @@ def send_email_notification(subject, body, is_error=False, html_body=None, scree
         return False
 
 
-def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success, asana_created):
+def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success):
     """Build a mobile-friendly HTML email for successful permit purchase (Outlook compatible)."""
     github_badge_bg = '#e8f5e9' if github_success else '#fff3e0'
     github_badge_color = '#2e7d32' if github_success else '#e65100'
-    asana_badge_bg = '#e8f5e9' if asana_created else '#e3f2fd'
-    asana_badge_color = '#2e7d32' if asana_created else '#1565c0'
 
     return f'''<!DOCTYPE html>
 <html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -308,15 +296,11 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                                     <td style="padding: 12px 0; color: #1a1a1a; font-weight: 500; font-size: 14px; border-bottom: 1px solid #eeeeee;">{permit_data['valid_to']}</td>
                                 </tr>
                             </table>
-                            <!-- Status Badges -->
+                            <!-- Status Badge -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
                                 <tr>
                                     <td style="padding: 6px 12px; background-color: {github_badge_bg}; color: {github_badge_color}; font-size: 12px; font-weight: 500; border-radius: 20px;">
                                         GitHub: {'Pushed' if github_success else 'Failed'}
-                                    </td>
-                                    <td width="8"></td>
-                                    <td style="padding: 6px 12px; background-color: {asana_badge_bg}; color: {asana_badge_color}; font-size: 12px; font-weight: 500; border-radius: 20px;">
-                                        Asana: {'Created' if asana_created else 'Skipped'}
                                     </td>
                                 </tr>
                             </table>
@@ -797,64 +781,6 @@ def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, 
     except Exception as e:
         print(bcolors.FAIL + f"Error: {e}" + bcolors.ENDC)
         return False
-
-def add_task_to_asana(task_name, task_notes, due_date, asana_project_name, asana_section_name):
-
-    print(bcolors.OKCYAN + "Creating Asana task..." + bcolors.ENDC)
-
-    # Initialize Asana client (v5 API)
-    configuration = asana.Configuration()
-    configuration.access_token = asana_access_token  # type: ignore
-    api_client = asana.ApiClient(configuration)
-
-    users_api = asana.UsersApi(api_client)
-    projects_api = asana.ProjectsApi(api_client)
-    sections_api = asana.SectionsApi(api_client)
-    tasks_api = asana.TasksApi(api_client)
-
-    # Get current user
-    me = users_api.get_user("me", {})
-    assignee_gid = me["gid"]  # type: ignore
-
-    workspace_gid = me["workspaces"][0]["gid"]  # type: ignore
-
-    # Find the project
-    projects = list(projects_api.get_projects({'workspace': workspace_gid, 'archived': False}))  # type: ignore
-    project = next((p for p in projects if p['name'].lower() == asana_project_name.lower()), None)
-    if not project:
-        raise Exception(f" Project '{asana_project_name}' not found.")
-    project_gid = project["gid"]
-
-    # Look for the target section
-    sections = list(sections_api.get_sections_for_project(project_gid, {}))  # type: ignore
-    section = next((s for s in sections if s["name"].lower() == asana_section_name.lower()), None)
-
-    # Create the section if it doesn't exist
-    if not section:
-        section = sections_api.create_section_for_project(project_gid, {"data": {"name": asana_section_name}})
-        print(f"➕ Created new section: {section['name']}")  # type: ignore
-
-    section_gid = section["gid"]  # type: ignore
-
-    # Create main task
-    try:
-        main_task = tasks_api.create_task({"data": {
-            'name': task_name,
-            'html_notes': task_notes,
-            'due_on': due_date,
-            'projects': [project_gid],
-            'assignee': assignee_gid
-        }}, {})  # type: ignore
-    except asana.rest.ApiException as e:  # type: ignore
-        print(bcolors.FAIL + f"Failed to create task in Asana. Error: {e}" + bcolors.ENDC)
-        return
-
-    print(f" Task created: {main_task['name']}")  # type: ignore
-
-    # Move task into the section
-    sections_api.add_task_for_section(section_gid, {"body": {"data": {"task": main_task["gid"]}}})  # type: ignore
-
-    print(f" Task added to section: {section['name']}")
 
 # ====== API-based Refetch (Fast) ======
 def refetch_permit_api(vehicle_index=None, card_index=None):
@@ -1365,9 +1291,6 @@ Examples:
   # Automated mode (use first vehicle and first card)
   python parking_pass_buyer.py --vehicle 0 --card 0
 
-  # Skip Asana task creation
-  python parking_pass_buyer.py --vehicle 0 --card 0 --no-asana
-
   # Process existing PDF without buying (searches for latest PDF)
   python parking_pass_buyer.py --parse-only
 
@@ -1387,7 +1310,6 @@ Examples:
 
     parser.add_argument('--vehicle', type=int, help='Vehicle index (0-based, see config/info_cars.json)')
     parser.add_argument('--card', type=int, help='Payment card index (0-based, see config/info_payment_cards.json)')
-    parser.add_argument('--no-asana', action='store_true', help='Skip creating Asana task')
     parser.add_argument('--no-github', action='store_true', help='Skip GitHub commit and push')
     parser.add_argument('--parse-only', action='store_true', help='Only parse existing PDF without buying new permit')
     parser.add_argument('--pdf', type=str, help='Path to specific PDF file to parse (use with --parse-only)')
@@ -1523,21 +1445,6 @@ Examples:
                     archive_pdf(pdf_path)
                 else:
                     print(bcolors.FAIL + "GitHub push failed - PDF not archived (you can try again)" + bcolors.ENDC)
-                # Create Asana task if not disabled (only after successful PDF processing)
-                if not args.no_asana:
-                    add_task_to_asana(
-                        task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
-                        task_notes = """<body>
-                                Renew parking pass for this *crap vehicle*
-
-                                **Don't forget dumbass!**
-
-                                PS: If you forget again, future you will be very disappointed.
-                            </body>""",
-                        due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                        asana_project_name = settings["asana"]["project_name"],
-                        asana_section_name = settings["asana"]["section_name"]
-                    )
 
                 print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
             else:
@@ -1603,18 +1510,9 @@ Examples:
                             if github_success or args.no_github:
                                 archive_pdf(pdf_path)
 
-                            if not args.no_asana:
-                                add_task_to_asana(
-                                    task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
-                                    task_notes = """<body>Renew parking pass for this *crap vehicle*\n\n**Don't forget dumbass!**</body>""",
-                                    due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                                    asana_project_name = settings["asana"]["project_name"],
-                                    asana_section_name = settings["asana"]["section_name"]
-                                )
-
                             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone (refetch)" + bcolors.ENDC)
                         else:
-                            print(bcolors.FAIL + "\nMissing permit data - Asana task not created" + bcolors.ENDC)
+                            print(bcolors.FAIL + "\nMissing permit data" + bcolors.ENDC)
                     else:
                         print(bcolors.FAIL + "No permit PDF found. Refetch failed." + bcolors.ENDC)
 
@@ -1759,22 +1657,6 @@ Examples:
             else:
                 print(bcolors.FAIL + "GitHub push failed - PDF not archived (you can try again)" + bcolors.ENDC)
 
-            # Create Asana task only after successful PDF processing
-            if not args.no_asana:
-                add_task_to_asana(
-                    task_name = f"Renew Parking Pass for {vehicle_name} - {vehicle_plate}",
-                    task_notes = """<body>
-                            Renew parking pass for this *crap vehicle*
-
-                            **Don't forget dumbass!**
-
-                            PS: If you forget again, future you will be very disappointed.
-                        </body>""",
-                    due_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
-                    asana_project_name = settings["asana"]["project_name"],
-                    asana_section_name = settings["asana"]["section_name"]
-                )
-
             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone" + bcolors.ENDC)
 
             # Send success email
@@ -1788,15 +1670,14 @@ Valid From: {permit_data['valid_from']}
 Valid To: {permit_data['valid_to']}
 
 GitHub Push: {'Success' if github_success else 'Failed'}
-Asana Task: {'Created' if not args.no_asana else 'Skipped'}
 """,
                 html_body=build_success_email_html(
                     vehicle_name, vehicle_plate, permit_data,
-                    github_success, not args.no_asana
+                    github_success
                 )
             )
         else:
-            print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted. Asana task not created." + bcolors.ENDC)
+            print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted." + bcolors.ENDC)
             send_email_notification(
                 subject=f"Parking Permit Warning - {vehicle_plate}",
                 body=f"Permit was purchased but PDF parsing failed.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
@@ -1808,7 +1689,7 @@ Asana Task: {'Created' if not args.no_asana else 'Skipped'}
                 )
             )
     else:
-        print(bcolors.FAIL + "No permit PDF found. Asana task not created." + bcolors.ENDC)
+        print(bcolors.FAIL + "No permit PDF found." + bcolors.ENDC)
 
         # Find the most recent error screenshot (if any)
         screenshot_path = None
