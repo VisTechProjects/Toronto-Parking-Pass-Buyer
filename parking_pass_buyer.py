@@ -516,6 +516,7 @@ def parse_permit_data(text):
         "barcode_label": None,
         "valid_from": None,
         "valid_to": None,
+        "amount_paid": None,
     }
 
     # Permit Number patterns
@@ -582,6 +583,17 @@ def parse_permit_data(text):
             data["valid_to"] = match.group(1).strip()
             break
 
+    # Search for amount paid
+    amount_patterns = [
+        r"Amount\s+paid\s*:\s*\$?([\d,]+\.?\d*)",
+        r"Total\s*:\s*\$?([\d,]+\.?\d*)",
+    ]
+    for pattern in amount_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            data["amount_paid"] = f"${match.group(1).strip()}"
+            break
+
     return data
 
 def find_permit_pdf(folder):
@@ -632,7 +644,8 @@ def create_permit_json(permit_data, output_path):
         "validFrom": valid_from,
         "validTo": valid_to,
         "barcodeValue": permit_data["permit_number"][1:] if permit_data["permit_number"] else None,
-        "barcodeLabel": permit_data["barcode_label"]
+        "barcodeLabel": permit_data["barcode_label"],
+        "amountPaid": permit_data.get("amount_paid")
     }
 
     # Write to file
