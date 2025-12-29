@@ -41,8 +41,9 @@ function parseDate($dateStr) {
     return DateTime::createFromFormat('M j, Y', trim($dateStr));
 }
 
-function getPermitStatus($validTo) {
+function getPermitStatus($validFrom, $validTo) {
     $validToDate = parseDate($validTo);
+    $validFromDate = parseDate($validFrom);
 
     if (!$validToDate) {
         return ['text' => 'Unknown', 'class' => 'expired', 'color' => '#607d8b'];
@@ -51,8 +52,16 @@ function getPermitStatus($validTo) {
     $validToDate->setTime(23, 59, 59);
     $now = new DateTime();
     $today = new DateTime('today');
-    $expiryDay = new DateTime($validToDate->format('Y-m-d'));
 
+    // Check if permit hasn't started yet
+    if ($validFromDate) {
+        $validFromDate->setTime(0, 0, 0);
+        if ($now < $validFromDate) {
+            return ['text' => 'Upcoming', 'class' => 'upcoming', 'color' => '#2196f3'];
+        }
+    }
+
+    $expiryDay = new DateTime($validToDate->format('Y-m-d'));
     $diff = $today->diff($expiryDay);
     $daysUntilExpiry = $diff->invert ? -1 : $diff->days;
 
@@ -273,6 +282,7 @@ $permits = array_reverse($permits);
             flex-shrink: 0;
         }
         .current { background: #4caf50; }
+        .upcoming { background: #2196f3; }
         .expiring { background: #ff9800; }
         .expired { background: #607d8b; }
         .scheduled-badge { background: #5c6bc0; }
@@ -364,6 +374,7 @@ $permits = array_reverse($permits);
                 <select id="filterStatus">
                     <option value="">All Statuses</option>
                     <option value="scheduled">Scheduled</option>
+                    <option value="upcoming">Upcoming</option>
                     <option value="current">Current</option>
                     <option value="expiring">Expiring Soon</option>
                     <option value="expired">Expired</option>
@@ -417,7 +428,7 @@ $permits = array_reverse($permits);
             <?php else: ?>
                 <?php foreach ($permits as $index => $permit): ?>
                     <?php
-                    $status = getPermitStatus($permit['validTo'] ?? '');
+                    $status = getPermitStatus($permit['validFrom'] ?? '', $permit['validTo'] ?? '');
                     $validFrom = parseDate($permit['validFrom'] ?? '');
                     $dateAttr = $validFrom ? $validFrom->format('Y-m-d') : '';
                     ?>
