@@ -312,6 +312,14 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                                     </td>
                                 </tr>
                             </table>
+                            <!-- Status Page Link -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 15px;">
+                                <tr>
+                                    <td align="center" style="padding: 15px;">
+                                        <a href="https://ilovekitty.ca/parking" style="color: #1976d2; font-size: 14px; text-decoration: none;">View Permit Status</a>
+                                    </td>
+                                </tr>
+                            </table>
                         </td>
                     </tr>
                     <!-- Footer -->
