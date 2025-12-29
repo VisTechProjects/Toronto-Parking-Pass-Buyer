@@ -247,14 +247,28 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <!--[if mso]>
     <style type="text/css">
         table {{border-collapse: collapse;}}
         td {{padding: 0;}}
+        .dark-mode-bg {{ background-color: #ffffff !important; }}
     </style>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
     <![endif]-->
+    <style>
+        :root {{ color-scheme: light; supported-color-schemes: light; }}
+        body, .body {{ background-color: #f5f5f5 !important; }}
+    </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+<body class="body" style="margin: 0; padding: 0; background-color: #f5f5f5; font-family: Arial, sans-serif;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f5f5f5;">
         <tr>
             <td align="center" style="padding: 20px 0;">
