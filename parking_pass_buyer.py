@@ -321,7 +321,7 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                             <!-- Reminder -->
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
                                 <tr>
-                                    <td style="background-color: #e3f2fd; padding: 15px; font-size: 14px; color: #1565c0; border-left: 4px solid #1976d2;">
+                                    <td style="background-color: #e3f2fd; padding: 15px; font-size: 14px; color: #1565c0; border-left: 4px solid #1976d2; font-weight: bold;">
                                         Plug in the permit display to update it with the new permit info.
                                     </td>
                                 </tr>
