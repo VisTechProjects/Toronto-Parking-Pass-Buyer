@@ -122,7 +122,8 @@ def load_settings():
 settings = load_settings()
 
 # ====== Logging Setup ======
-LOGS_DIR = Path('logs')
+SCRIPT_DIR = Path(__file__).parent.resolve()
+LOGS_DIR = SCRIPT_DIR / 'logs'
 LOGS_DIR.mkdir(exist_ok=True)
 
 # Create a new log file for this run
@@ -808,16 +809,16 @@ def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, 
                             auth_url = auth_url.replace('.git', '')
 
                         # Temporarily set remote URL with token
-                        subprocess.run(['git', 'remote', 'set-url', 'origin', auth_url], check=True)
-                        subprocess.run(['git', 'push'], check=True)
+                        subprocess.run(['git', 'remote', 'set-url', 'origin', auth_url], check=True, capture_output=True, text=True)
+                        subprocess.run(['git', 'push'], check=True, capture_output=True, text=True)
                         # Restore original URL
-                        subprocess.run(['git', 'remote', 'set-url', 'origin', remote_url], check=True)
+                        subprocess.run(['git', 'remote', 'set-url', 'origin', remote_url], check=True, capture_output=True, text=True)
                     else:
                         # Not a GitHub URL, push normally
-                        subprocess.run(['git', 'push'], check=True)
+                        subprocess.run(['git', 'push'], check=True, capture_output=True, text=True)
                 else:
                     # No token, use default git credentials
-                    subprocess.run(['git', 'push'], check=True)
+                    subprocess.run(['git', 'push'], check=True, capture_output=True, text=True)
 
                 print(bcolors.OKGREEN + f"Pushed to GitHub (parking_pass_display/{target_branch}): {commit_message}" + bcolors.ENDC)
                 log_event(f"Successfully pushed permit update: {commit_message}", "SUCCESS")
@@ -838,11 +839,19 @@ def commit_and_push_to_github(file_path, commit_message, target_repo_path=None, 
             os.chdir(original_dir)
 
     except subprocess.CalledProcessError as e:
-        print(bcolors.FAIL + f"Git operation failed: {e}" + bcolors.ENDC)
+        error_msg = f"Git operation failed: {e}"
+        if e.stderr:
+            error_msg += f"\nstderr: {e.stderr}"
+        if e.stdout:
+            error_msg += f"\nstdout: {e.stdout}"
+        print(bcolors.FAIL + error_msg + bcolors.ENDC)
+        log_event(error_msg, "ERROR")
         os.chdir(original_dir)
         return False
     except Exception as e:
-        print(bcolors.FAIL + f"Error: {e}" + bcolors.ENDC)
+        error_msg = f"GitHub push error: {e}"
+        print(bcolors.FAIL + error_msg + bcolors.ENDC)
+        log_event(error_msg, "ERROR")
         return False
 
 # ====== API-based Refetch (Fast) ======

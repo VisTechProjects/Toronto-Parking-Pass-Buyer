@@ -66,11 +66,19 @@ function formatDateTime($dateStr) {
 
 $daysRemaining = null;
 $isExpired = false;
+$isUpcoming = false;
 $expiresText = '';
 
 if ($permit && isset($permit['validTo'])) {
     $dateStr = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $permit['validTo']);
     $validTo = DateTime::createFromFormat('M j, Y', trim($dateStr));
+
+    // Parse validFrom to check if permit hasn't started yet
+    $validFrom = null;
+    if (isset($permit['validFrom'])) {
+        $fromDateStr = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $permit['validFrom']);
+        $validFrom = DateTime::createFromFormat('M j, Y', trim($fromDateStr));
+    }
 
     if ($validTo) {
         $validTo->setTime(23, 59, 59);
@@ -81,19 +89,38 @@ if ($permit && isset($permit['validTo'])) {
         $diff = $today->diff($expiryDay);
         $daysUntilExpiry = $diff->invert ? -1 : $diff->days;
 
-        if ($now > $validTo) {
-            $isExpired = true;
-            $daysRemaining = 0;
-            $expiresText = 'Expired';
-        } elseif ($daysUntilExpiry == 0) {
-            $daysRemaining = 0;
-            $expiresText = 'Expires Today';
-        } elseif ($daysUntilExpiry == 1) {
-            $daysRemaining = 1;
-            $expiresText = 'Expires Tomorrow';
-        } else {
-            $daysRemaining = $daysUntilExpiry;
-            $expiresText = $daysRemaining . ' days remaining';
+        // Check if permit hasn't started yet
+        if ($validFrom) {
+            $validFrom->setTime(0, 0, 0);
+            if ($now < $validFrom) {
+                $isUpcoming = true;
+                $startDiff = $today->diff(new DateTime($validFrom->format('Y-m-d')));
+                $daysUntilStart = $startDiff->days;
+                if ($daysUntilStart == 0) {
+                    $expiresText = 'Starts Today';
+                } elseif ($daysUntilStart == 1) {
+                    $expiresText = 'Starts Tomorrow';
+                } else {
+                    $expiresText = 'Starts in ' . $daysUntilStart . ' days';
+                }
+            }
+        }
+
+        if (!$isUpcoming) {
+            if ($now > $validTo) {
+                $isExpired = true;
+                $daysRemaining = 0;
+                $expiresText = 'Expired';
+            } elseif ($daysUntilExpiry == 0) {
+                $daysRemaining = 0;
+                $expiresText = 'Expires Today';
+            } elseif ($daysUntilExpiry == 1) {
+                $daysRemaining = 1;
+                $expiresText = 'Expires Tomorrow';
+            } else {
+                $daysRemaining = $daysUntilExpiry;
+                $expiresText = $daysRemaining . ' days remaining';
+            }
         }
     }
 }
@@ -103,6 +130,9 @@ $statusText = 'Valid';
 if ($isExpired) {
     $statusColor = '#f44336';
     $statusText = 'Expired';
+} elseif ($isUpcoming) {
+    $statusColor = '#2196f3';
+    $statusText = 'Upcoming';
 } elseif ($daysRemaining !== null && $daysRemaining <= 1) {
     $statusColor = '#ff9800';
     $statusText = 'Expiring Soon';
