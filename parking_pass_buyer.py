@@ -238,10 +238,49 @@ def send_email_notification(subject, body, is_error=False, html_body=None, scree
         return False
 
 
-def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success):
+def check_price_change(amount_paid):
+    """Check if the permit price has changed from expected. Returns (changed, expected, actual) or (False, None, None)."""
+    if not amount_paid:
+        return False, None, None
+
+    expected_price = settings.get("pricing", {}).get("expected_weekly_price")
+    if expected_price is None:
+        return False, None, None
+
+    # Parse the actual price (remove $ and convert to float)
+    try:
+        actual_price = float(amount_paid.replace("$", "").replace(",", ""))
+    except (ValueError, AttributeError):
+        return False, None, None
+
+    # Check if price changed (with small tolerance for floating point)
+    if abs(actual_price - expected_price) > 0.01:
+        return True, expected_price, actual_price
+
+    return False, expected_price, actual_price
+
+
+def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success, price_change_info=None):
     """Build a mobile-friendly HTML email for successful permit purchase (Outlook compatible)."""
     github_badge_bg = '#e8f5e9' if github_success else '#fff3e0'
     github_badge_color = '#2e7d32' if github_success else '#e65100'
+
+    # Build price change warning HTML if applicable
+    price_warning_html = ""
+    if price_change_info and price_change_info[0]:  # (changed, expected, actual)
+        _, expected, actual = price_change_info
+        diff = actual - expected
+        direction = "increased" if diff > 0 else "decreased"
+        price_warning_html = f'''
+                            <!-- Price Change Warning -->
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
+                                <tr>
+                                    <td style="background-color: #fff3e0; padding: 15px; font-size: 14px; color: #e65100; border-left: 4px solid #ff9800;">
+                                        <strong>Price Change Detected!</strong><br>
+                                        Weekly permit price has {direction} from ${expected:.2f} to ${actual:.2f} ({("+" if diff > 0 else "-")}${abs(diff):.2f})
+                                    </td>
+                                </tr>
+                            </table>'''
 
     return f'''<!DOCTYPE html>
 <html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -328,7 +367,7 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                                         <!--<![endif]-->
                                     </td>
                                 </tr>
-                            </table>
+                            </table>{price_warning_html}
                             <!-- Reminder -->
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
                                 <tr>
@@ -1774,7 +1813,8 @@ GitHub Push: {'Success' if github_success else 'Failed'}
 """,
                 html_body=build_success_email_html(
                     vehicle_name, vehicle_plate, permit_data,
-                    github_success
+                    github_success,
+                    price_change_info=check_price_change(permit_data.get('amount_paid'))
                 )
             )
         else:
