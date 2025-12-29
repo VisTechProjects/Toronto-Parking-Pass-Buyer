@@ -627,16 +627,33 @@ def create_permit_json(permit_data, output_path):
     valid_from = permit_data["valid_from"]
     valid_to = permit_data["valid_to"]
 
-    # Convert "Oct 25, 2025 at 12:00 AM" to "Oct 25, 2025: 12:00"
+    def convert_to_24h(time_str):
+        """Convert '12:00 AM' to '00:00' or '12:00 PM' to '12:00', etc."""
+        import re
+        match = re.match(r'(\d{1,2}):(\d{2})\s*(AM|PM)', time_str, re.IGNORECASE)
+        if match:
+            hour = int(match.group(1))
+            minute = match.group(2)
+            ampm = match.group(3).upper()
+            if ampm == 'AM':
+                if hour == 12:
+                    hour = 0
+            else:  # PM
+                if hour != 12:
+                    hour += 12
+            return f"{hour:02d}:{minute}"
+        return time_str
+
+    # Convert "Oct 25, 2025 at 12:00 AM" to "Oct 25, 2025: 00:00"
     if valid_from and " at " in valid_from:
         date_part, time_part = valid_from.split(" at ")
-        time_clean = time_part.replace(" AM", "").replace(" PM", "")
-        valid_from = f"{date_part}: {time_clean}"
+        time_24h = convert_to_24h(time_part.strip())
+        valid_from = f"{date_part}: {time_24h}"
 
     if valid_to and " at " in valid_to:
         date_part, time_part = valid_to.split(" at ")
-        time_clean = time_part.replace(" AM", "").replace(" PM", "")
-        valid_to = f"{date_part}: {time_clean}"
+        time_24h = convert_to_24h(time_part.strip())
+        valid_to = f"{date_part}: {time_24h}"
 
     # Create JSON structure
     json_data = {
