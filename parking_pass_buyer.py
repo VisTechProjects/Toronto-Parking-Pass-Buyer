@@ -340,7 +340,7 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top: 15px;">
                                 <tr>
                                     <td align="center" style="padding: 15px;">
-                                        <a href="https://ilovekitty.ca/parking" style="color: #1976d2; font-size: 14px; text-decoration: none;">View Permit Status</a>
+                                        <a href="https://ilovekitty.ca/parking?permit={permit_data['permit_number']}" style="color: #1976d2; font-size: 14px; text-decoration: none;">View Permit Status</a>
                                     </td>
                                 </tr>
                             </table>
@@ -638,6 +638,24 @@ def create_permit_json(permit_data, output_path):
     # Write to file
     with open(output_path, 'w') as f:
         json.dump(json_data, f, indent=2)
+
+    # Append to permits history (for status page)
+    history_path = Path(output_path).parent / 'permits_history.json'
+    try:
+        if history_path.exists():
+            with open(history_path, 'r') as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        # Only add if not already in history (check by permit number)
+        if not any(p.get('permitNumber') == json_data['permitNumber'] for p in history):
+            history.append(json_data)
+            with open(history_path, 'w') as f:
+                json.dump(history, f, indent=2)
+            print(bcolors.OKCYAN + f"Added to permits history ({len(history)} total)" + bcolors.ENDC)
+    except Exception as e:
+        print(bcolors.WARNING + f"Could not update permits history: {e}" + bcolors.ENDC)
 
     print(bcolors.OKGREEN + f"\nCreated permit JSON: {output_path}" + bcolors.ENDC)
     return json_data
