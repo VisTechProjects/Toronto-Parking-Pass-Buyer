@@ -313,8 +313,18 @@ def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_su
                             <!-- Status Badge -->
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top: 20px;">
                                 <tr>
-                                    <td style="padding: 6px 12px; background-color: {github_badge_bg}; color: {github_badge_color}; font-size: 12px; font-weight: 500;">
-                                        GitHub: {'Pushed' if github_success else 'Failed'}
+                                    <td>
+                                        <!--[if mso]>
+                                        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" style="height:28px;v-text-anchor:middle;width:130px;" arcsize="50%" fillcolor="{github_badge_bg}" stroke="f">
+                                        <w:anchorlock/>
+                                        <center style="color:{github_badge_color};font-family:Arial,sans-serif;font-size:12px;font-weight:500;">GitHub: {'Pushed' if github_success else 'Failed'}</center>
+                                        </v:roundrect>
+                                        <![endif]-->
+                                        <!--[if !mso]><!-->
+                                        <span style="display:inline-block;padding: 6px 12px; background-color: {github_badge_bg}; color: {github_badge_color}; font-size: 12px; font-weight: 500; border-radius: 20px;">
+                                            GitHub: {'Pushed' if github_success else 'Failed'}
+                                        </span>
+                                        <!--<![endif]-->
                                     </td>
                                 </tr>
                             </table>
