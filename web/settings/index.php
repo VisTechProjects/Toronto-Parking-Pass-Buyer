@@ -35,18 +35,90 @@ if (file_exists($envFile)) {
 }
 
 function sendSettingsEmail($to, $from, $password, $subject, $body) {
-    $headers = [
-        "From: $from",
-        "Reply-To: $from",
-        "MIME-Version: 1.0",
-        "Content-Type: text/html; charset=UTF-8",
-        "X-Priority: 1",
-        "X-MSMail-Priority: High",
-        "Importance: High"
-    ];
+    // Use Gmail SMTP directly for reliable delivery
+    $smtpServer = 'smtp.gmail.com';
+    $smtpPort = 587;
 
-    // Use PHP mail() - server should have sendmail configured
-    return mail($to, $subject, $body, implode("\r\n", $headers));
+    // Create email with headers
+    $boundary = md5(time());
+    $headers = "From: $from\r\n";
+    $headers .= "Reply-To: $from\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $headers .= "X-Priority: 1\r\n";
+    $headers .= "X-MSMail-Priority: High\r\n";
+    $headers .= "Importance: High\r\n";
+
+    $message = "Subject: $subject\r\n";
+    $message .= $headers;
+    $message .= "\r\n$body";
+
+    // Connect to SMTP
+    $socket = @fsockopen($smtpServer, $smtpPort, $errno, $errstr, 10);
+    if (!$socket) return false;
+
+    stream_set_timeout($socket, 10);
+
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '220') { fclose($socket); return false; }
+
+    // EHLO
+    fputs($socket, "EHLO localhost\r\n");
+    while ($line = fgets($socket, 512)) {
+        if (substr($line, 3, 1) == ' ') break;
+    }
+
+    // STARTTLS
+    fputs($socket, "STARTTLS\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '220') { fclose($socket); return false; }
+
+    // Enable TLS
+    stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+
+    // EHLO again after TLS
+    fputs($socket, "EHLO localhost\r\n");
+    while ($line = fgets($socket, 512)) {
+        if (substr($line, 3, 1) == ' ') break;
+    }
+
+    // AUTH LOGIN
+    fputs($socket, "AUTH LOGIN\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '334') { fclose($socket); return false; }
+
+    fputs($socket, base64_encode($from) . "\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '334') { fclose($socket); return false; }
+
+    fputs($socket, base64_encode($password) . "\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '235') { fclose($socket); return false; }
+
+    // MAIL FROM
+    fputs($socket, "MAIL FROM:<$from>\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '250') { fclose($socket); return false; }
+
+    // RCPT TO
+    fputs($socket, "RCPT TO:<$to>\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '250') { fclose($socket); return false; }
+
+    // DATA
+    fputs($socket, "DATA\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '354') { fclose($socket); return false; }
+
+    fputs($socket, $message . "\r\n.\r\n");
+    $response = fgets($socket, 512);
+    if (substr($response, 0, 3) != '250') { fclose($socket); return false; }
+
+    // QUIT
+    fputs($socket, "QUIT\r\n");
+    fclose($socket);
+
+    return true;
 }
 
 // Check if auth is configured
