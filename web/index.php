@@ -348,13 +348,11 @@ $amountPaid = $permit['amountPaid'] ?? null;
                     <a href="/parking/" class="link">View Current</a>
                 <?php endif; ?>
                 <a href="/parking/history/" class="link">View History</a>
-                <a href="/parking/settings/" class="link" title="Settings">&#9881;</a>
             </div>
         <?php else: ?>
             <div class="no-permit">No permit data found</div>
             <div class="links">
                 <a href="/parking/history/" class="link">View History</a>
-                <a href="/parking/settings/" class="link" title="Settings">&#9881;</a>
             </div>
         <?php endif; ?>
     </div>
