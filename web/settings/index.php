@@ -130,6 +130,7 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
         .container {
             max-width: 500px;
             margin: 0 auto;
+            padding-top: 20px;
         }
         .card {
             background: #2a3142;
@@ -161,6 +162,7 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
         }
         .setting-info {
             flex: 1;
+            margin-right: 20px;
         }
         .setting-label {
             font-size: 16px;
