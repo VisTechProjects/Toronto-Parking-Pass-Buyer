@@ -124,22 +124,86 @@ function sendSettingsEmail($to, $from, $password, $subject, $body) {
 // Check if auth is configured
 $authConfigured = $authUser && $authPass;
 
+// Rate limiting for brute force protection
+$rateLimitFile = '/tmp/parking_settings_ratelimit.json';
+$maxAttempts = 5;
+$lockoutMinutes = 15;
+
+function getRateLimitData($file) {
+    if (!file_exists($file)) return [];
+    $data = json_decode(file_get_contents($file), true);
+    return is_array($data) ? $data : [];
+}
+
+function saveRateLimitData($file, $data) {
+    file_put_contents($file, json_encode($data));
+}
+
+function isIpBlocked($file, $ip, $maxAttempts, $lockoutMinutes) {
+    $data = getRateLimitData($file);
+    if (!isset($data[$ip])) return false;
+    $record = $data[$ip];
+    if ($record['attempts'] >= $maxAttempts) {
+        $lockoutUntil = $record['last_attempt'] + ($lockoutMinutes * 60);
+        if (time() < $lockoutUntil) {
+            return ceil(($lockoutUntil - time()) / 60);
+        }
+        // Lockout expired, reset
+        unset($data[$ip]);
+        saveRateLimitData($file, $data);
+    }
+    return false;
+}
+
+function recordFailedAttempt($file, $ip) {
+    $data = getRateLimitData($file);
+    if (!isset($data[$ip])) {
+        $data[$ip] = ['attempts' => 0, 'last_attempt' => 0];
+    }
+    $data[$ip]['attempts']++;
+    $data[$ip]['last_attempt'] = time();
+    saveRateLimitData($file, $data);
+    return $data[$ip]['attempts'];
+}
+
+function clearFailedAttempts($file, $ip) {
+    $data = getRateLimitData($file);
+    if (isset($data[$ip])) {
+        unset($data[$ip]);
+        saveRateLimitData($file, $data);
+    }
+}
+
 // Handle form submission (requires auth via POST password field)
 $message = null;
 $messageType = null;
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $authenticated = false;
 
-    if ($authConfigured) {
+    // Check if IP is blocked
+    $blockedMinutes = isIpBlocked($rateLimitFile, $clientIp, $maxAttempts, $lockoutMinutes);
+    if ($blockedMinutes) {
+        $message = "Too many failed attempts. Try again in $blockedMinutes minute(s).";
+        $messageType = 'error';
+    } elseif ($authConfigured) {
         // Check password from modal
         if (isset($_POST['password']) && $_POST['password'] === $authPass) {
             $authenticated = true;
+            clearFailedAttempts($rateLimitFile, $clientIp);
         }
 
-        if (!$authenticated) {
-            $message = 'Incorrect password.';
+        if (!$authenticated && !$blockedMinutes) {
+            $attempts = recordFailedAttempt($rateLimitFile, $clientIp);
+            $remaining = $maxAttempts - $attempts;
+            if ($remaining > 0) {
+                $message = "Incorrect password. $remaining attempt(s) remaining.";
+            } else {
+                $message = "Too many failed attempts. Locked out for $lockoutMinutes minutes.";
+            }
             $messageType = 'error';
+            sleep(2); // Slow down brute force
         }
     } else {
         // No auth configured - allow changes (for initial setup)
