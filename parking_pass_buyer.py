@@ -1458,6 +1458,15 @@ Examples:
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         print(bcolors.OKCYAN + "Running in headless mode (no browser window)" + bcolors.ENDC)
 
+    # Check if autobuyer is enabled (only for purchase flow, not parse-only or refetch)
+    if not args.parse_only and not args.refetch:
+        autobuyer_enabled = settings.get("autobuyer", {}).get("enabled", True)
+        if not autobuyer_enabled:
+            log_event("Autobuyer is disabled in settings. Exiting.", "INFO")
+            print(bcolors.WARNING + "Autobuyer is disabled in settings. No permit will be purchased." + bcolors.ENDC)
+            print(bcolors.OKCYAN + "To enable, visit the settings page or update config/settings.json" + bcolors.ENDC)
+            sys.exit(0)
+
     # Parse-only mode: just process existing PDF
     if args.parse_only:
         print(bcolors.OKCYAN + "Parse-only mode: Looking for existing permit PDF..." + bcolors.ENDC)
