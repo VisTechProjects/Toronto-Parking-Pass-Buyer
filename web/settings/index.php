@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $attempts = recordFailedAttempt($rateLimitFile, $clientIp);
             $remaining = $maxAttempts - $attempts;
             if ($remaining > 0) {
-                $message = "Incorrect password. $remaining attempt(s) remaining.";
+                $message = "Incorrect password.";
             } else {
                 $message = "Too many failed attempts. Locked out for $lockoutMinutes minutes.";
                 // Send email alert for lockout
