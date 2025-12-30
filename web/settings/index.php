@@ -23,13 +23,13 @@ if (file_exists($envFile)) {
     if (preg_match('/^SETTINGS_PASS=(.+)$/m', $envContent, $m)) {
         $authPass = trim($m[1]);
     }
-    if (preg_match('/^EMAIL_FROM="(.+)"$/m', $envContent, $m)) {
+    if (preg_match('/^EMAIL_FROM="(.+?)"\r?$/m', $envContent, $m)) {
         $emailFrom = trim($m[1]);
     }
-    if (preg_match('/^EMAIL_TO="(.+)"$/m', $envContent, $m)) {
+    if (preg_match('/^EMAIL_TO="(.+?)"\r?$/m', $envContent, $m)) {
         $emailTo = trim($m[1]);
     }
-    if (preg_match('/^EMAIL_APP_PASSWORD="(.+)"$/m', $envContent, $m)) {
+    if (preg_match('/^EMAIL_APP_PASSWORD="(.+?)"\r?$/m', $envContent, $m)) {
         $emailAppPassword = trim($m[1]);
     }
 }
