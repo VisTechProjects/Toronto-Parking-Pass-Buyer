@@ -203,14 +203,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $message = "Too many failed attempts. Locked out for $lockoutMinutes minutes.";
                 // Send email alert for lockout
                 if ($emailFrom && $emailTo) {
+                    $userAgent = htmlspecialchars($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown');
+                    $referer = htmlspecialchars($_SERVER['HTTP_REFERER'] ?? 'Direct');
                     $emailSubject = "Security Alert: Settings Login Blocked";
                     $emailBody = "
                     <html>
                     <body style='font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;'>
-                        <div style='max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                        <div style='max-width: 500px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
                             <h2 style='margin: 0 0 16px; color: #f44336;'>Security Alert</h2>
                             <p style='margin: 0 0 16px; color: #666;'>Someone has been <strong style='color: #f44336;'>blocked</strong> from the parking settings page after $maxAttempts failed login attempts.</p>
-                            <p style='margin: 0; font-size: 12px; color: #999;'>IP Address: $clientIp<br>Time: " . date('M j, Y g:i A') . "<br>Lockout Duration: $lockoutMinutes minutes</p>
+                            <table style='width: 100%; font-size: 12px; color: #666; border-collapse: collapse;'>
+                                <tr><td style='padding: 4px 0; color: #999;'>IP Address:</td><td style='padding: 4px 0;'>$clientIp</td></tr>
+                                <tr><td style='padding: 4px 0; color: #999;'>Time:</td><td style='padding: 4px 0;'>" . date('M j, Y g:i:s A T') . "</td></tr>
+                                <tr><td style='padding: 4px 0; color: #999;'>Lockout:</td><td style='padding: 4px 0;'>$lockoutMinutes minutes</td></tr>
+                                <tr><td style='padding: 4px 0; color: #999;'>Referrer:</td><td style='padding: 4px 0;'>$referer</td></tr>
+                                <tr><td style='padding: 4px 0; color: #999; vertical-align: top;'>User Agent:</td><td style='padding: 4px 0; word-break: break-all;'>$userAgent</td></tr>
+                            </table>
                         </div>
                     </body>
                     </html>";
