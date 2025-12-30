@@ -2,6 +2,14 @@
 $permitFile = '/home/admin/Toronto-Parking-Pass-Buyer/permit.json';
 $historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
 $carsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/info_cars.json';
+$settingsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/settings.json';
+
+// Load settings for autobuyer status
+$settings = [];
+if (file_exists($settingsFile)) {
+    $settings = json_decode(file_get_contents($settingsFile), true) ?: [];
+}
+$autobuyerEnabled = $settings['autobuyer']['enabled'] ?? true;
 
 // Load current permit to compare
 $currentPermit = null;
@@ -238,6 +246,22 @@ $amountPaid = $permit['amountPaid'] ?? null;
             font-size: 14px;
         }
         .link:hover { text-decoration: underline; }
+        .autobuyer-warning {
+            background: #1e2433;
+            border-left: 4px solid #ff9800;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            border-radius: 0 8px 8px 0;
+            font-size: 13px;
+            color: #ffb74d;
+        }
+        .autobuyer-warning a {
+            color: #64b5f6;
+            text-decoration: none;
+        }
+        .autobuyer-warning a:hover {
+            text-decoration: underline;
+        }
 
         /* Mobile Responsive - fit without scrolling */
         @media (max-width: 400px) {
@@ -307,6 +331,11 @@ $amountPaid = $permit['amountPaid'] ?? null;
 </head>
 <body>
     <div class="card">
+        <?php if (!$autobuyerEnabled): ?>
+            <div class="autobuyer-warning">
+                Auto-buyer is disabled. <a href="/parking/settings/">Enable it</a>
+            </div>
+        <?php endif; ?>
         <?php if ($permit): ?>
             <div class="header">
                 <span class="title">Parking Permit</span>
