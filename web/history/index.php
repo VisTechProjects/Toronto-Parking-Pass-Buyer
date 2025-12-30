@@ -2,11 +2,19 @@
 $historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
 $carsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/info_cars.json';
 $permitFile = '/home/admin/Toronto-Parking-Pass-Buyer/permit.json';
+$settingsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/settings.json';
 
 $permits = [];
 if (file_exists($historyFile)) {
     $permits = json_decode(file_get_contents($historyFile), true) ?: [];
 }
+
+// Load settings to check if autobuyer is enabled
+$settings = [];
+if (file_exists($settingsFile)) {
+    $settings = json_decode(file_get_contents($settingsFile), true) ?: [];
+}
+$autobuyerEnabled = $settings['autobuyer']['enabled'] ?? true;
 
 // Load current permit to calculate next scheduled
 $currentPermit = null;
@@ -74,9 +82,9 @@ function getPermitStatus($validFrom, $validTo) {
     }
 }
 
-// Calculate next scheduled permit based on current permit expiry
+// Calculate next scheduled permit based on current permit expiry (only if autobuyer enabled)
 $scheduledPermit = null;
-if ($currentPermit && isset($currentPermit['validTo'])) {
+if ($autobuyerEnabled && $currentPermit && isset($currentPermit['validTo'])) {
     $currentExpiry = parseDate($currentPermit['validTo']);
     if ($currentExpiry) {
         // Next permit starts day after current expires
@@ -461,7 +469,10 @@ $permits = array_reverse($permits);
         </div>
 
         <div class="no-results" id="noResults">No permits match your filters</div>
-        <a href="/parking/" class="back-link">View Current Permit</a>
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px;">
+            <a href="/parking/" class="back-link">View Current Permit</a>
+            <a href="/parking/settings/" class="back-link" title="Settings">&#9881; Settings</a>
+        </div>
     </div>
 
     <script>
