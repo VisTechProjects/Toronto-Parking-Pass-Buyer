@@ -8,9 +8,13 @@ if (file_exists($settingsFile)) {
     $settings = json_decode(file_get_contents($settingsFile), true) ?: [];
 }
 
-// Load auth credentials from .env
+// Load credentials from .env
 $authUser = null;
 $authPass = null;
+$emailFrom = null;
+$emailTo = null;
+$emailAppPassword = null;
+
 if (file_exists($envFile)) {
     $envContent = file_get_contents($envFile);
     if (preg_match('/^SETTINGS_USER=(.+)$/m', $envContent, $m)) {
@@ -19,30 +23,50 @@ if (file_exists($envFile)) {
     if (preg_match('/^SETTINGS_PASS=(.+)$/m', $envContent, $m)) {
         $authPass = trim($m[1]);
     }
+    if (preg_match('/^EMAIL_FROM="?([^"\n]+)"?$/m', $envContent, $m)) {
+        $emailFrom = trim($m[1]);
+    }
+    if (preg_match('/^EMAIL_TO="?([^"\n]+)"?$/m', $envContent, $m)) {
+        $emailTo = trim($m[1]);
+    }
+    if (preg_match('/^EMAIL_APP_PASSWORD="?([^"\n]+)"?$/m', $envContent, $m)) {
+        $emailAppPassword = trim($m[1]);
+    }
+}
+
+function sendSettingsEmail($to, $from, $password, $subject, $body) {
+    $headers = [
+        "From: $from",
+        "Reply-To: $from",
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=UTF-8",
+        "X-Priority: 1",
+        "X-MSMail-Priority: High",
+        "Importance: High"
+    ];
+
+    // Use PHP mail() - server should have sendmail configured
+    return mail($to, $subject, $body, implode("\r\n", $headers));
 }
 
 // Check if auth is configured
 $authConfigured = $authUser && $authPass;
 
-// Handle form submission (requires auth)
+// Handle form submission (requires auth via POST password field)
 $message = null;
 $messageType = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $authenticated = false;
 
     if ($authConfigured) {
-        // Check HTTP Basic Auth
-        if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
-            if ($_SERVER['PHP_AUTH_USER'] === $authUser && $_SERVER['PHP_AUTH_PW'] === $authPass) {
-                $authenticated = true;
-            }
+        // Check password from modal
+        if (isset($_POST['password']) && $_POST['password'] === $authPass) {
+            $authenticated = true;
         }
 
         if (!$authenticated) {
-            header('WWW-Authenticate: Basic realm="Parking Settings"');
-            header('HTTP/1.0 401 Unauthorized');
-            $message = 'Authentication required to change settings.';
+            $message = 'Incorrect password.';
             $messageType = 'error';
         }
     } else {
@@ -50,19 +74,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $authenticated = true;
     }
 
-    if ($authenticated && isset($_POST['action'])) {
-        if ($_POST['action'] === 'toggle_autobuyer') {
-            $currentEnabled = $settings['autobuyer']['enabled'] ?? true;
-            $settings['autobuyer'] = $settings['autobuyer'] ?? [];
-            $settings['autobuyer']['enabled'] = !$currentEnabled;
+    if ($authenticated && $_POST['action'] === 'toggle_autobuyer') {
+        $currentEnabled = $settings['autobuyer']['enabled'] ?? true;
+        $settings['autobuyer'] = $settings['autobuyer'] ?? [];
+        $settings['autobuyer']['enabled'] = !$currentEnabled;
+        $newState = $settings['autobuyer']['enabled'];
 
-            if (file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT))) {
-                $message = 'Auto-buyer ' . ($settings['autobuyer']['enabled'] ? 'enabled' : 'disabled') . '.';
-                $messageType = 'success';
-            } else {
-                $message = 'Failed to save settings.';
-                $messageType = 'error';
+        if (file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT))) {
+            $message = 'Auto-buyer ' . ($newState ? 'enabled' : 'disabled') . '.';
+            $messageType = 'success';
+
+            // Send email notification
+            if ($emailFrom && $emailTo) {
+                $stateText = $newState ? 'ENABLED' : 'DISABLED';
+                $stateColor = $newState ? '#4caf50' : '#f44336';
+                $emailSubject = "Parking Auto-buyer $stateText";
+                $emailBody = "
+                <html>
+                <body style='font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;'>
+                    <div style='max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                        <h2 style='margin: 0 0 16px; color: #333;'>Auto-buyer Setting Changed</h2>
+                        <p style='margin: 0 0 16px; color: #666;'>The parking permit auto-buyer has been <strong style='color: $stateColor;'>$stateText</strong>.</p>
+                        <p style='margin: 0; font-size: 12px; color: #999;'>Changed at: " . date('M j, Y g:i A') . "<br>From: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "</p>
+                    </div>
+                </body>
+                </html>";
+                sendSettingsEmail($emailTo, $emailFrom, $emailAppPassword, $emailSubject, $emailBody);
             }
+        } else {
+            $message = 'Failed to save settings.';
+            $messageType = 'error';
         }
     }
 }
@@ -141,18 +182,18 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
             transition: all 0.2s;
         }
         .toggle-btn.enabled {
-            background: #4caf50;
-            color: white;
-        }
-        .toggle-btn.enabled:hover {
-            background: #43a047;
-        }
-        .toggle-btn.disabled {
             background: #f44336;
             color: white;
         }
-        .toggle-btn.disabled:hover {
+        .toggle-btn.enabled:hover {
             background: #e53935;
+        }
+        .toggle-btn.disabled {
+            background: #4caf50;
+            color: white;
+        }
+        .toggle-btn.disabled:hover {
+            background: #43a047;
         }
         .info-row {
             display: flex;
@@ -225,6 +266,81 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
             background: #b71c1c;
             color: #ef9a9a;
         }
+
+        /* Modal styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal {
+            background: #2a3142;
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 360px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .modal-desc {
+            font-size: 14px;
+            color: #8892a6;
+            margin-bottom: 20px;
+        }
+        .modal-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #3a4255;
+            border-radius: 8px;
+            background: #1a1f2e;
+            color: #e2e8f0;
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+        .modal-input:focus {
+            outline: none;
+            border-color: #64b5f6;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .modal-btn.cancel {
+            background: #3a4255;
+            color: #e2e8f0;
+        }
+        .modal-btn.confirm.enable {
+            background: #4caf50;
+            color: white;
+        }
+        .modal-btn.confirm.disable {
+            background: #f44336;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -246,12 +362,9 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
                     <div class="setting-label">Automatic Permit Buying</div>
                     <div class="setting-desc">When enabled, permits are purchased automatically when the current one expires.</div>
                 </div>
-                <form method="POST" style="margin-left: 16px;">
-                    <input type="hidden" name="action" value="toggle_autobuyer">
-                    <button type="submit" class="toggle-btn <?= $autobuyerEnabled ? 'enabled' : 'disabled' ?>">
-                        <?= $autobuyerEnabled ? 'Disable' : 'Enable' ?>
-                    </button>
-                </form>
+                <button type="button" class="toggle-btn <?= $autobuyerEnabled ? 'enabled' : 'disabled' ?>" onclick="showModal()">
+                    <?= $autobuyerEnabled ? 'Disable' : 'Enable' ?>
+                </button>
             </div>
 
             <?php if (!$autobuyerEnabled): ?>
@@ -272,11 +385,6 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
                 <span class="info-value">$<?= number_format($expectedPrice, 2) ?></span>
             </div>
             <?php endif; ?>
-
-            <div class="info-row">
-                <span class="info-label">Auth Protection</span>
-                <span class="info-value"><?= $authConfigured ? 'Enabled' : 'Not configured' ?></span>
-            </div>
         </div>
 
         <div class="links">
@@ -285,7 +393,44 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
         </div>
     </div>
 
+    <!-- Password Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-title"><?= $autobuyerEnabled ? 'Disable' : 'Enable' ?> Auto-buyer</div>
+            <div class="modal-desc">Enter password to confirm this change.</div>
+            <form method="POST" id="toggleForm">
+                <input type="hidden" name="action" value="toggle_autobuyer">
+                <input type="password" name="password" class="modal-input" placeholder="Password" autocomplete="current-password" required>
+                <div class="modal-buttons">
+                    <button type="button" class="modal-btn cancel" onclick="hideModal()">Cancel</button>
+                    <button type="submit" class="modal-btn confirm <?= $autobuyerEnabled ? 'disable' : 'enable' ?>">
+                        <?= $autobuyerEnabled ? 'Disable' : 'Enable' ?>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        function showModal() {
+            document.getElementById('modalOverlay').classList.add('active');
+            document.querySelector('.modal-input').focus();
+        }
+
+        function hideModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+
+        // Close modal on overlay click
+        document.getElementById('modalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) hideModal();
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') hideModal();
+        });
+
         console.log('%c Settings Page ', 'background: #2a3142; color: #64b5f6; font-size: 14px; padding: 4px 8px; border-radius: 4px;');
     </script>
 </body>
