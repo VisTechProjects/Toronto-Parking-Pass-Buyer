@@ -226,6 +226,23 @@ $permits = array_reverse($permits);
             font-weight: 500;
             margin-bottom: 12px;
         }
+        .autobuyer-warning {
+            background: #1e2433;
+            border-left: 4px solid #ff9800;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            border-radius: 0 8px 8px 0;
+            font-size: 13px;
+            color: #ffb74d;
+        }
+        .autobuyer-warning a {
+            color: #64b5f6;
+            text-decoration: none;
+            margin-left: 8px;
+        }
+        .autobuyer-warning a:hover {
+            text-decoration: underline;
+        }
         /* Permit Cards */
         .permit-card {
             background: #2a3142;
@@ -407,6 +424,13 @@ $permits = array_reverse($permits);
         </div>
         <?php if ($totalSpent > 0): ?>
             <div class="total-spent-line">Money wasted on Toronto parking: $<?= number_format($totalSpent, 2) ?></div>
+        <?php endif; ?>
+
+        <?php if (!$autobuyerEnabled): ?>
+            <div class="autobuyer-warning">
+                Auto-buyer is disabled. Permits will NOT be purchased automatically.
+                <a href="/parking/settings/">Enable it</a>
+            </div>
         <?php endif; ?>
 
         <div id="permitsList">
