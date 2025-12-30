@@ -201,6 +201,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 $message = "Incorrect password. $remaining attempt(s) remaining.";
             } else {
                 $message = "Too many failed attempts. Locked out for $lockoutMinutes minutes.";
+                // Send email alert for lockout
+                if ($emailFrom && $emailTo) {
+                    $emailSubject = "Security Alert: Settings Login Blocked";
+                    $emailBody = "
+                    <html>
+                    <body style='font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;'>
+                        <div style='max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                            <h2 style='margin: 0 0 16px; color: #f44336;'>Security Alert</h2>
+                            <p style='margin: 0 0 16px; color: #666;'>Someone has been <strong style='color: #f44336;'>blocked</strong> from the parking settings page after $maxAttempts failed login attempts.</p>
+                            <p style='margin: 0; font-size: 12px; color: #999;'>IP Address: $clientIp<br>Time: " . date('M j, Y g:i A') . "<br>Lockout Duration: $lockoutMinutes minutes</p>
+                        </div>
+                    </body>
+                    </html>";
+                    sendSettingsEmail($emailTo, $emailFrom, $emailAppPassword, $emailSubject, $emailBody);
+                }
             }
             $messageType = 'error';
             sleep(2); // Slow down brute force
