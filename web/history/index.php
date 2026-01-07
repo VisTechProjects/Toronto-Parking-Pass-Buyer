@@ -118,6 +118,29 @@ if ($autobuyerEnabled && $currentPermit && isset($currentPermit['validTo'])) {
     }
 }
 
+// Helper function to check if permit is a weekly permit
+function isWeeklyPermit($permit) {
+    $from = parseDate($permit['validFrom'] ?? '');
+    $to = parseDate($permit['validTo'] ?? '');
+    if (!$from || !$to) return false;
+    return $from->diff($to)->days >= 6;
+}
+
+// Build price change map - tracks which permits first introduced a new price
+$priceChangeMap = [];
+$previousPrice = null;
+foreach ($permits as $i => $permit) {
+    if (!isWeeklyPermit($permit)) continue;
+    $price = floatval(str_replace(['$', ','], '', $permit['amountPaid'] ?? '0'));
+    if ($price <= 0) continue;
+
+    if ($previousPrice !== null && $price != $previousPrice) {
+        // This permit is the first at a new price
+        $priceChangeMap[$permit['permitNumber'] ?? ''] = $price - $previousPrice;
+    }
+    $previousPrice = $price;
+}
+
 // Get unique plates for filter dropdown
 $uniquePlates = [];
 foreach ($permits as $permit) {
@@ -301,6 +324,13 @@ $permits = array_reverse($permits);
             color: #4caf50;
             font-weight: 500;
         }
+        .price-change {
+            font-size: 11px;
+            font-weight: 500;
+            margin-left: 6px;
+        }
+        .price-change.up { color: #f44336; }
+        .price-change.down { color: #4caf50; }
         .permit-dates {
             font-size: 13px;
             color: #8892a6;
@@ -489,7 +519,11 @@ $permits = array_reverse($permits);
                             <div class="permit-header">
                                 <span class="permit-number"><?= htmlspecialchars($permit['permitNumber'] ?? 'N/A') ?></span>
                                 <?php if (!empty($permit['amountPaid'])): ?>
-                                    <span class="permit-price"><?= htmlspecialchars($permit['amountPaid']) ?></span>
+                                    <span class="permit-price"><?= htmlspecialchars($permit['amountPaid']) ?><?php
+                                        $permitNum = $permit['permitNumber'] ?? '';
+                                        if (isset($priceChangeMap[$permitNum])):
+                                            $change = $priceChangeMap[$permitNum];
+                                        ?><span class="price-change <?= $change > 0 ? 'up' : 'down' ?>"><?= $change > 0 ? '+' : '' ?>$<?= number_format(abs($change), 2) ?></span><?php endif; ?></span>
                                 <?php endif; ?>
                             </div>
                             <div class="permit-dates">
