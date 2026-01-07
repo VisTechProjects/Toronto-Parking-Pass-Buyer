@@ -512,7 +512,7 @@ $permits = array_reverse($permits);
         <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px;">
             <a href="/parking/" class="back-link">View Current Permit</a>
             <a href="/parking/prices/" class="back-link">Price History</a>
-            <a href="/parking/settings/" class="back-link" title="Settings">&#9881; Settings</a>
+            <a href="/parking/settings/" class="back-link" title="Settings"><span style="font-family: 'Segoe UI Symbol', sans-serif;">⚙</span> Settings</a>
         </div>
     </div>
 
