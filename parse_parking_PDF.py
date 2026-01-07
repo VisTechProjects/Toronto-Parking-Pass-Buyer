@@ -179,14 +179,31 @@ def update_permit_json(folder: Path, permit_data: Dict[str, Optional[str]]) -> N
         time_24h = convert_to_24h(time_part.strip())
         valid_to = f"{date_part}: {time_24h}"
     
+    # Look up vehicle name from info_cars.json
+    vehicle_name = None
+    if permit_data["plate_number"]:
+        try:
+            cars_file = folder / "config" / "info_cars.json"
+            if cars_file.exists():
+                with open(cars_file, 'r') as f:
+                    info_cars = json.load(f)
+                for car in info_cars:
+                    if car.get('plate', '').upper() == permit_data["plate_number"].upper():
+                        vehicle_name = car.get('name')
+                        break
+        except Exception:
+            pass
+
     # Create JSON structure matching the OLD GitHub format
     json_data = {
         "permitNumber": permit_data["permit_number"],
         "plateNumber": permit_data["plate_number"],
+        "vehicleName": vehicle_name or "",
         "validFrom": valid_from,
         "validTo": valid_to,
         "barcodeValue": permit_data["permit_number"][1:] if permit_data["permit_number"] else None,  # Remove first letter (T)
-        "barcodeLabel": permit_data["barcode_label"]
+        "barcodeLabel": permit_data["barcode_label"],
+        "amountPaid": ""  # PDF doesn't contain price info
     }
     
     # Write to local file with proper formatting (2-space indent to match old file)
