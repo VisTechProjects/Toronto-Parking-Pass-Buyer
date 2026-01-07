@@ -154,6 +154,61 @@ if ($isHistorical) {
 
 // Get amount paid
 $amountPaid = $permit['amountPaid'] ?? null;
+
+// Helper function to check if permit is a weekly permit (approximately 7 days)
+function isWeeklyPermit($p) {
+    $from = $p['validFrom'] ?? '';
+    $to = $p['validTo'] ?? '';
+    $from = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $from);
+    $to = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $to);
+    $fromDate = DateTime::createFromFormat('M j, Y', trim($from));
+    $toDate = DateTime::createFromFormat('M j, Y', trim($to));
+    if (!$fromDate || !$toDate) return false;
+    return $fromDate->diff($toDate)->days >= 6;
+}
+
+// Calculate price change for current permit (not historical, only weekly permits)
+$priceChangeAmount = null;
+$priceChangeDate = null;
+if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($permit)) {
+    $permits = json_decode(file_get_contents($historyFile), true) ?: [];
+    if (count($permits) >= 2) {
+        $currentPrice = floatval(str_replace(['$', ','], '', $permit['amountPaid'] ?? '0'));
+
+        // Find the current permit's index in history
+        $currentIndex = -1;
+        for ($i = count($permits) - 1; $i >= 0; $i--) {
+            if (($permits[$i]['permitNumber'] ?? '') === ($permit['permitNumber'] ?? '')) {
+                $currentIndex = $i;
+                break;
+            }
+        }
+
+        // Look backwards from current permit to find when price changed (only compare weekly permits)
+        if ($currentIndex > 0) {
+            for ($i = $currentIndex - 1; $i >= 0; $i--) {
+                // Skip non-weekly permits
+                if (!isWeeklyPermit($permits[$i])) continue;
+
+                $prevPrice = floatval(str_replace(['$', ','], '', $permits[$i]['amountPaid'] ?? '0'));
+                if ($prevPrice != $currentPrice && $prevPrice > 0) {
+                    $priceChangeAmount = $currentPrice - $prevPrice;
+                    // Find the first weekly permit at the new price
+                    for ($j = $i + 1; $j <= $currentIndex; $j++) {
+                        if (isWeeklyPermit($permits[$j])) {
+                            $priceChangeDate = $permits[$j]['validFrom'] ?? null;
+                            if ($priceChangeDate) {
+                                $priceChangeDate = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $priceChangeDate);
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -217,6 +272,12 @@ $amountPaid = $permit['amountPaid'] ?? null;
         .label { color: #8892a6; font-size: 14px; }
         .value { font-weight: 500; color: #e2e8f0; text-align: right; }
         .value.price { color: #4caf50; }
+        .price-change {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .price-change.up { color: #f44336; }
+        .price-change.down { color: #4caf50; }
         .days-remaining {
             text-align: center;
             margin-top: 20px;
@@ -358,7 +419,14 @@ $amountPaid = $permit['amountPaid'] ?? null;
             <?php if ($amountPaid): ?>
             <div class="info-row">
                 <span class="label">Cost</span>
-                <span class="value price"><?= htmlspecialchars($amountPaid) ?></span>
+                <span class="value price">
+                    <?= htmlspecialchars($amountPaid) ?>
+                    <?php if ($priceChangeAmount !== null && $priceChangeDate): ?>
+                        <div class="price-change <?= $priceChangeAmount > 0 ? 'up' : 'down' ?>">
+                            <?= $priceChangeAmount > 0 ? '+' : '' ?>$<?= number_format(abs($priceChangeAmount), 2) ?> since <?= htmlspecialchars($priceChangeDate) ?>
+                        </div>
+                    <?php endif; ?>
+                </span>
             </div>
             <?php endif; ?>
             <div class="info-row">
@@ -377,6 +445,8 @@ $amountPaid = $permit['amountPaid'] ?? null;
                     <a href="/parking/" class="link">View Current</a>
                 <?php endif; ?>
                 <a href="/parking/history/" class="link">View History</a>
+                <a href="/parking/prices/" class="link">Price History</a>
+                <a href="/parking/settings/" class="link" title="Settings">&#9881;</a>
             </div>
         <?php else: ?>
             <div class="no-permit">No permit data found</div>

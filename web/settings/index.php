@@ -233,43 +233,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $authenticated = true;
     }
 
-    if ($authenticated && $_POST['action'] === 'toggle_autobuyer') {
-        $currentEnabled = $settings['autobuyer']['enabled'] ?? true;
-        $settings['autobuyer'] = $settings['autobuyer'] ?? [];
-        $settings['autobuyer']['enabled'] = !$currentEnabled;
-        $newState = $settings['autobuyer']['enabled'];
+    if ($authenticated) {
+        if ($_POST['action'] === 'save_notifications') {
+            $settings['notifications'] = [
+                'purchase_success' => isset($_POST['notify_purchase_success']),
+                'purchase_failed' => isset($_POST['notify_purchase_failed']),
+                'expiry_reminder' => isset($_POST['notify_expiry_reminder']),
+                'security_alerts' => isset($_POST['notify_security_alerts'])
+            ];
 
-        if (file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT))) {
-            $message = 'Auto-buyer ' . ($newState ? 'enabled' : 'disabled') . '.';
-            $messageType = 'success';
-
-            // Send email notification
-            if ($emailFrom && $emailTo) {
-                $stateText = $newState ? 'ENABLED' : 'DISABLED';
-                $stateColor = $newState ? '#4caf50' : '#f44336';
-                $emailSubject = "Parking Auto-buyer $stateText";
-                $emailBody = "
-                <html>
-                <body style='font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;'>
-                    <div style='max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
-                        <h2 style='margin: 0 0 16px; color: #333;'>Auto-buyer Setting Changed</h2>
-                        <p style='margin: 0 0 16px; color: #666;'>The parking permit auto-buyer has been <strong style='color: $stateColor;'>$stateText</strong>.</p>
-                        <p style='margin: 0; font-size: 12px; color: #999;'>Changed at: " . date('M j, Y g:i A') . "<br>From: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "</p>
-                    </div>
-                </body>
-                </html>";
-                sendSettingsEmail($emailTo, $emailFrom, $emailAppPassword, $emailSubject, $emailBody);
+            if (file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT))) {
+                $message = 'Email notification settings saved.';
+                $messageType = 'success';
+            } else {
+                $message = 'Failed to save settings.';
+                $messageType = 'error';
             }
-        } else {
-            $message = 'Failed to save settings.';
-            $messageType = 'error';
+        } elseif ($_POST['action'] === 'toggle_autobuyer') {
+            $currentEnabled = $settings['autobuyer']['enabled'] ?? true;
+            $settings['autobuyer'] = $settings['autobuyer'] ?? [];
+            $settings['autobuyer']['enabled'] = !$currentEnabled;
+            $newState = $settings['autobuyer']['enabled'];
+
+            if (file_put_contents($settingsFile, json_encode($settings, JSON_PRETTY_PRINT))) {
+                $message = 'Auto-buyer ' . ($newState ? 'enabled' : 'disabled') . '.';
+                $messageType = 'success';
+
+                // Send email notification
+                if ($emailFrom && $emailTo) {
+                    $stateText = $newState ? 'ENABLED' : 'DISABLED';
+                    $stateColor = $newState ? '#4caf50' : '#f44336';
+                    $emailSubject = "Parking Auto-buyer $stateText";
+                    $emailBody = "
+                    <html>
+                    <body style='font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;'>
+                        <div style='max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);'>
+                            <h2 style='margin: 0 0 16px; color: #333;'>Auto-buyer Setting Changed</h2>
+                            <p style='margin: 0 0 16px; color: #666;'>The parking permit auto-buyer has been <strong style='color: $stateColor;'>$stateText</strong>.</p>
+                            <p style='margin: 0; font-size: 12px; color: #999;'>Changed at: " . date('M j, Y g:i A') . "<br>From: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "</p>
+                        </div>
+                    </body>
+                    </html>";
+                    sendSettingsEmail($emailTo, $emailFrom, $emailAppPassword, $emailSubject, $emailBody);
+                }
+            } else {
+                $message = 'Failed to save settings.';
+                $messageType = 'error';
+            }
         }
     }
 }
 
 // Get current state
 $autobuyerEnabled = $settings['autobuyer']['enabled'] ?? true;
-$expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
+
+// Calculate expected price from permit history (most recent permit)
+$historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
+$permits = [];
+if (file_exists($historyFile)) {
+    $permits = json_decode(file_get_contents($historyFile), true) ?: [];
+}
+
+$latestPrice = null;
+$previousPrice = null;
+$priceChangeDate = null;
+$priceChangeAmount = null;
+
+if (count($permits) >= 1) {
+    // Get the latest permit price
+    $latestPermit = $permits[count($permits) - 1];
+    $latestPrice = floatval(str_replace(['$', ','], '', $latestPermit['amountPaid'] ?? '0'));
+
+    // Find when the price last changed by looking backwards
+    for ($i = count($permits) - 2; $i >= 0; $i--) {
+        $prevPermitPrice = floatval(str_replace(['$', ','], '', $permits[$i]['amountPaid'] ?? '0'));
+        if ($prevPermitPrice != $latestPrice) {
+            $previousPrice = $prevPermitPrice;
+            // The price changed on the permit AFTER this one
+            $changePermit = $permits[$i + 1];
+            $priceChangeDate = $changePermit['validFrom'] ?? null;
+            if ($priceChangeDate) {
+                // Parse and format the date
+                $priceChangeDate = preg_replace('/:\s*\d{1,2}:\d{2}$/', '', $priceChangeDate);
+            }
+            $priceChangeAmount = $latestPrice - $previousPrice;
+            break;
+        }
+    }
+}
+
+// Get notification settings (default all to true)
+$notifications = $settings['notifications'] ?? [];
+$notifyPurchaseSuccess = $notifications['purchase_success'] ?? true;
+$notifyPurchaseFailed = $notifications['purchase_failed'] ?? true;
+$notifyExpiryReminder = $notifications['expiry_reminder'] ?? true;
+$notifySecurityAlerts = $notifications['security_alerts'] ?? true;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -372,6 +430,18 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
         .info-value {
             color: #e2e8f0;
             font-weight: 500;
+        }
+        .info-value.price-up {
+            color: #f44336;
+        }
+        .info-value.price-down {
+            color: #4caf50;
+        }
+        .change-date {
+            font-size: 11px;
+            color: #8892a6;
+            margin-left: 8px;
+            font-weight: 400;
         }
         .message {
             padding: 12px 16px;
@@ -527,6 +597,93 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
             background: #f44336;
             color: white;
         }
+        .modal-btn.confirm.save {
+            background: #2196f3;
+            color: white;
+        }
+
+        /* Checkbox styles */
+        .checkbox-row {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #3a4255;
+        }
+        .checkbox-row:last-child {
+            border-bottom: none;
+        }
+        .checkbox-wrapper {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+        }
+        .checkbox-wrapper input {
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            cursor: pointer;
+            z-index: 1;
+        }
+        .checkbox-wrapper .checkmark {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            background: #1a1f2e;
+            border: 2px solid #3a4255;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .checkbox-wrapper input:checked ~ .checkmark {
+            background: #4caf50;
+            border-color: #4caf50;
+        }
+        .checkbox-wrapper .checkmark:after {
+            content: '';
+            position: absolute;
+            display: none;
+            left: 6px;
+            top: 2px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        .checkbox-wrapper input:checked ~ .checkmark:after {
+            display: block;
+        }
+        .checkbox-label {
+            flex: 1;
+        }
+        .checkbox-label-text {
+            font-size: 14px;
+            color: #e2e8f0;
+        }
+        .checkbox-label-desc {
+            font-size: 12px;
+            color: #8892a6;
+            margin-top: 2px;
+        }
+        .save-btn {
+            width: 100%;
+            padding: 12px;
+            margin-top: 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2196f3;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .save-btn:hover {
+            background: #1976d2;
+        }
     </style>
 </head>
 <body>
@@ -565,17 +722,79 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
                 <span class="title">Info</span>
             </div>
 
-            <?php if ($expectedPrice): ?>
+            <?php if ($latestPrice): ?>
             <div class="info-row">
-                <span class="info-label">Expected Weekly Price</span>
-                <span class="info-value">$<?= number_format($expectedPrice, 2) ?></span>
+                <span class="info-label">Current Weekly Price</span>
+                <span class="info-value">$<?= number_format($latestPrice, 2) ?></span>
+            </div>
+            <?php if ($priceChangeAmount !== null): ?>
+            <div class="info-row">
+                <span class="info-label">Last Price Change</span>
+                <span class="info-value <?= $priceChangeAmount > 0 ? 'price-up' : 'price-down' ?>">
+                    <?= $priceChangeAmount > 0 ? '+' : '' ?>$<?= number_format($priceChangeAmount, 2) ?>
+                    <span class="change-date"><?= htmlspecialchars($priceChangeDate) ?></span>
+                </span>
             </div>
             <?php endif; ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="card">
+            <div class="header">
+                <span class="title">Email Notifications</span>
+            </div>
+
+            <div class="checkbox-row">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="notify_purchase_success" <?= $notifyPurchaseSuccess ? 'checked' : '' ?>>
+                    <span class="checkmark"></span>
+                </label>
+                <div class="checkbox-label">
+                    <div class="checkbox-label-text">Purchase Success</div>
+                    <div class="checkbox-label-desc">Email when a permit is purchased</div>
+                </div>
+            </div>
+
+            <div class="checkbox-row">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="notify_purchase_failed" <?= $notifyPurchaseFailed ? 'checked' : '' ?>>
+                    <span class="checkmark"></span>
+                </label>
+                <div class="checkbox-label">
+                    <div class="checkbox-label-text">Purchase Failed</div>
+                    <div class="checkbox-label-desc">Email when a purchase fails</div>
+                </div>
+            </div>
+
+            <div class="checkbox-row">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="notify_expiry_reminder" <?= $notifyExpiryReminder ? 'checked' : '' ?>>
+                    <span class="checkmark"></span>
+                </label>
+                <div class="checkbox-label">
+                    <div class="checkbox-label-text">Expiry Reminder</div>
+                    <div class="checkbox-label-desc">Email before permit expires</div>
+                </div>
+            </div>
+
+            <div class="checkbox-row">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="notify_security_alerts" <?= $notifySecurityAlerts ? 'checked' : '' ?>>
+                    <span class="checkmark"></span>
+                </label>
+                <div class="checkbox-label">
+                    <div class="checkbox-label-text">Security Alerts</div>
+                    <div class="checkbox-label-desc">Email for login attempts and blocks</div>
+                </div>
+            </div>
+
+            <button type="button" class="save-btn" onclick="showNotificationModal()">Save Notification Settings</button>
         </div>
 
         <div class="links">
             <a href="/parking/" class="link">View Current Permit</a>
             <a href="/parking/history/" class="link">View History</a>
+            <a href="/parking/prices/" class="link">Price History</a>
         </div>
     </div>
 
@@ -600,6 +819,34 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
                     <button type="submit" class="modal-btn confirm <?= $autobuyerEnabled ? 'disable' : 'enable' ?>">
                         <?= $autobuyerEnabled ? 'Disable' : 'Enable' ?>
                     </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notification Settings Modal -->
+    <div class="modal-overlay" id="notificationModalOverlay">
+        <div class="modal">
+            <div class="modal-title">Save Notification Settings</div>
+            <div class="modal-desc">Enter password to confirm this change.</div>
+            <form method="POST" id="notificationForm">
+                <input type="hidden" name="action" value="save_notifications">
+                <input type="hidden" name="notify_purchase_success" id="hidden_purchase_success">
+                <input type="hidden" name="notify_purchase_failed" id="hidden_purchase_failed">
+                <input type="hidden" name="notify_expiry_reminder" id="hidden_expiry_reminder">
+                <input type="hidden" name="notify_security_alerts" id="hidden_security_alerts">
+                <div class="password-wrapper">
+                    <input type="password" name="password" id="notificationPasswordInput" class="modal-input" placeholder="Password" autocomplete="current-password" required>
+                    <button type="button" class="toggle-password" onclick="toggleNotificationPasswordVisibility()">
+                        <svg id="notificationEyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-buttons">
+                    <button type="button" class="modal-btn cancel" onclick="hideNotificationModal()">Cancel</button>
+                    <button type="submit" class="modal-btn confirm save">Save</button>
                 </div>
             </form>
         </div>
@@ -644,8 +891,63 @@ $expectedPrice = $settings['pricing']['expected_weekly_price'] ?? null;
 
         // Close modal on Escape key
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') hideModal();
+            if (e.key === 'Escape') {
+                hideModal();
+                hideNotificationModal();
+            }
         });
+
+        // Notification modal functions
+        function showNotificationModal() {
+            // Copy checkbox states to hidden inputs
+            document.getElementById('hidden_purchase_success').value = document.getElementById('notify_purchase_success').checked ? '1' : '';
+            document.getElementById('hidden_purchase_failed').value = document.getElementById('notify_purchase_failed').checked ? '1' : '';
+            document.getElementById('hidden_expiry_reminder').value = document.getElementById('notify_expiry_reminder').checked ? '1' : '';
+            document.getElementById('hidden_security_alerts').value = document.getElementById('notify_security_alerts').checked ? '1' : '';
+
+            document.getElementById('notificationModalOverlay').classList.add('active');
+            document.getElementById('notificationPasswordInput').focus();
+        }
+
+        function hideNotificationModal() {
+            document.getElementById('notificationModalOverlay').classList.remove('active');
+            const input = document.getElementById('notificationPasswordInput');
+            input.type = 'password';
+            input.value = '';
+            updateNotificationEyeIcon(false);
+        }
+
+        function toggleNotificationPasswordVisibility() {
+            const input = document.getElementById('notificationPasswordInput');
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            updateNotificationEyeIcon(isPassword);
+        }
+
+        function updateNotificationEyeIcon(visible) {
+            const icon = document.getElementById('notificationEyeIcon');
+            if (visible) {
+                icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+            } else {
+                icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+            }
+        }
+
+        // Close notification modal on overlay click
+        document.getElementById('notificationModalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) hideNotificationModal();
+        });
+
+        // Auto-dismiss message banner after 3 seconds
+        const messageBanner = document.querySelector('.message');
+        if (messageBanner) {
+            setTimeout(() => {
+                messageBanner.style.transition = 'opacity 0.3s, margin-top 0.3s';
+                messageBanner.style.opacity = '0';
+                messageBanner.style.marginTop = '-' + messageBanner.offsetHeight + 'px';
+                setTimeout(() => messageBanner.remove(), 300);
+            }, 3000);
+        }
 
         console.log('%c Settings Page ', 'background: #2a3142; color: #64b5f6; font-size: 14px; padding: 4px 8px; border-radius: 4px;');
     </script>

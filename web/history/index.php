@@ -75,6 +75,8 @@ function getPermitStatus($validFrom, $validTo) {
 
     if ($now > $validToDate) {
         return ['text' => 'Expired', 'class' => 'expired', 'color' => '#607d8b'];
+    } elseif ($daysUntilExpiry == 0) {
+        return ['text' => 'Expires Today', 'class' => 'expires-today', 'color' => '#f44336'];
     } elseif ($daysUntilExpiry <= 1) {
         return ['text' => 'Expiring Soon', 'class' => 'expiring', 'color' => '#ff9800'];
     } else {
@@ -93,13 +95,25 @@ if ($autobuyerEnabled && $currentPermit && isset($currentPermit['validTo'])) {
         $nextEnd = clone $nextStart;
         $nextEnd->modify('+6 days'); // 7 day permit
 
+        // Get latest weekly permit price
+        $latestWeeklyPrice = null;
+        for ($i = count($permits) - 1; $i >= 0; $i--) {
+            $p = $permits[$i];
+            $from = parseDate($p['validFrom'] ?? '');
+            $to = parseDate($p['validTo'] ?? '');
+            if ($from && $to && $from->diff($to)->days >= 6) {
+                $latestWeeklyPrice = $p['amountPaid'] ?? null;
+                break;
+            }
+        }
+
         $scheduledPermit = [
             'permitNumber' => 'Pending',
             'plateNumber' => $currentPermit['plateNumber'] ?? '',
             'validFrom' => $nextStart->format('M j, Y'),
             'validTo' => $nextEnd->format('M j, Y'),
             'isScheduled' => true,
-            'amountPaid' => '$48.38'
+            'amountPaid' => $latestWeeklyPrice
         ];
     }
 }
@@ -309,6 +323,7 @@ $permits = array_reverse($permits);
         .current { background: #4caf50; }
         .upcoming { background: #2196f3; }
         .expiring { background: #ff9800; }
+        .expires-today { background: #f44336; }
         .expired { background: #607d8b; }
         .scheduled-badge { background: #5c6bc0; }
         .empty {
@@ -402,6 +417,7 @@ $permits = array_reverse($permits);
                     <option value="upcoming">Upcoming</option>
                     <option value="current">Current</option>
                     <option value="expiring">Expiring Soon</option>
+                    <option value="expires-today">Expires Today</option>
                     <option value="expired">Expired</option>
                 </select>
             </div>
@@ -495,6 +511,7 @@ $permits = array_reverse($permits);
         <div class="no-results" id="noResults">No permits match your filters</div>
         <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px;">
             <a href="/parking/" class="back-link">View Current Permit</a>
+            <a href="/parking/prices/" class="back-link">Price History</a>
             <a href="/parking/settings/" class="back-link" title="Settings">&#9881; Settings</a>
         </div>
     </div>
