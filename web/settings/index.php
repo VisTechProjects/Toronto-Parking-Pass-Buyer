@@ -464,6 +464,7 @@ $notifySecurityAlerts = $notifications['security_alerts'] ?? true;
             justify-content: center;
             gap: 20px;
             margin-top: 16px;
+            padding-bottom: 20px;
         }
         .link {
             color: #64b5f6;

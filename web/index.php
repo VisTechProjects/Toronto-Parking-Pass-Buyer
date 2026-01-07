@@ -300,6 +300,7 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
             justify-content: center;
             gap: 20px;
             margin-top: 14px;
+            padding-bottom: 20px;
         }
         .link {
             color: #64b5f6;

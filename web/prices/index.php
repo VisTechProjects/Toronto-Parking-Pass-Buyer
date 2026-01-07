@@ -185,6 +185,7 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
             justify-content: center;
             gap: 20px;
             margin-top: 16px;
+            padding-bottom: 20px;
         }
         .link {
             color: #64b5f6;

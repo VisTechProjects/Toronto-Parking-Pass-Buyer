@@ -509,7 +509,7 @@ $permits = array_reverse($permits);
         </div>
 
         <div class="no-results" id="noResults">No permits match your filters</div>
-        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px;">
+        <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px; padding-bottom: 20px;">
             <a href="/parking/" class="back-link">View Current Permit</a>
             <a href="/parking/prices/" class="back-link">Price History</a>
             <a href="/parking/settings/" class="back-link" title="Settings">Settings</a>
