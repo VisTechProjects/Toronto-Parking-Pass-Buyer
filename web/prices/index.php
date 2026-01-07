@@ -259,7 +259,7 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
         <div class="links">
             <a href="/parking/" class="link">View Current Permit</a>
             <a href="/parking/history/" class="link">View History</a>
-            <a href="/parking/settings/" class="link"><span style="font-family: 'Segoe UI Symbol', sans-serif;">⚙</span> Settings</a>
+            <a href="/parking/settings/" class="link">Settings</a>
         </div>
     </div>
 </body>
