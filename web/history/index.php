@@ -343,7 +343,7 @@ $permits = array_reverse($permits);
             margin-top: 14px;
             color: #64b5f6;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 14px;
         }
         .back-link:hover { text-decoration: underline; }
 
@@ -389,7 +389,7 @@ $permits = array_reverse($permits);
             }
             .back-link {
                 margin-top: 12px;
-                font-size: 12px;
+                font-size: 13px;
             }
         }
     </style>
