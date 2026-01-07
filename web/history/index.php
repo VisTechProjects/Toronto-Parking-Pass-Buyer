@@ -582,9 +582,16 @@ $permits = array_reverse($permits);
                     show = false;
                 }
 
-                // Status filter
-                if (status && card.dataset.status !== status) {
-                    show = false;
+                // Status filter (expiring also shows expires-today)
+                if (status) {
+                    const cardStatus = card.dataset.status;
+                    if (status === 'expiring') {
+                        if (cardStatus !== 'expiring' && cardStatus !== 'expires-today') {
+                            show = false;
+                        }
+                    } else if (cardStatus !== status) {
+                        show = false;
+                    }
                 }
 
                 // Date filter (based on permit start date)
