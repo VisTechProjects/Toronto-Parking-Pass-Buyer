@@ -148,6 +148,7 @@ python parking_pass_buyer.py --parse-only
 
 - [parking-permit-display](https://github.com/VisTechProjects/parking-permit-display) - ESP32 e-ink firmware
 - [parking-permit-android](https://github.com/VisTechProjects/parking-permit-android) - Android companion app
+- [Parking permit website](https://ilovekitty.ca/parking/) - Web dashboard
 
 This script pushes `permit.json` to the display repo, which an ESP32 e-ink display reads to show the current permit barcode.
 
