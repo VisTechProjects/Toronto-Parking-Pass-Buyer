@@ -431,16 +431,16 @@ $notifySecurityAlerts = $notifications['security_alerts'] ?? true;
             color: #e2e8f0;
             font-weight: 500;
         }
-        .info-value.price-up {
+        .price-up {
             color: #f44336;
         }
-        .info-value.price-down {
+        .price-down {
             color: #4caf50;
         }
         .change-date {
             font-size: 11px;
             color: #8892a6;
-            margin-left: 8px;
+            margin-right: 8px;
             font-weight: 400;
         }
         .message {
