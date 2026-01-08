@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://www.python.org/) [![Selenium](https://img.shields.io/badge/Selenium-automation-green)](https://www.selenium.dev/)
 
-Automates purchasing and refetching parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download.
+Automates purchasing and refetching parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download, then syncs to an e-ink display via the Android app.
 
 ## Why I made this
 Laziness and boredom, the fact I made this readme... says it all...
