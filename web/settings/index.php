@@ -731,9 +731,9 @@ $notifySecurityAlerts = $notifications['security_alerts'] ?? true;
             <?php if ($priceChangeAmount !== null): ?>
             <div class="info-row">
                 <span class="info-label">Last Price Change</span>
-                <span class="info-value <?= $priceChangeAmount > 0 ? 'price-up' : 'price-down' ?>">
-                    <?= $priceChangeAmount > 0 ? '+' : '' ?>$<?= number_format($priceChangeAmount, 2) ?>
+                <span class="info-value">
                     <span class="change-date"><?= htmlspecialchars($priceChangeDate) ?></span>
+                    <span class="<?= $priceChangeAmount > 0 ? 'price-up' : 'price-down' ?>"><?= $priceChangeAmount > 0 ? '+' : '' ?>$<?= number_format($priceChangeAmount, 2) ?></span>
                 </span>
             </div>
             <?php endif; ?>
