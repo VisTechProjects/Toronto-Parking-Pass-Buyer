@@ -103,6 +103,12 @@ def load_settings():
         "github": {
             "display_repo_path": "../parking_pass_display",
             "permit_branch": "permit"
+        },
+        "notifications": {
+            "purchase_success": True,
+            "purchase_failed": True,
+            "expiry_reminder": True,
+            "security_alerts": True
         }
     }
 
@@ -110,16 +116,27 @@ def load_settings():
         try:
             with open(settings_path, 'r') as f:
                 user_settings = json.load(f)
-            # Merge with defaults
+            # Merge with defaults (deep merge for nested dicts)
             for key in defaults:
                 if key in user_settings:
-                    defaults[key].update(user_settings[key])
+                    if isinstance(defaults[key], dict):
+                        defaults[key].update(user_settings[key])
+                    else:
+                        defaults[key] = user_settings[key]
+            # Also copy any keys not in defaults
+            for key in user_settings:
+                if key not in defaults:
+                    defaults[key] = user_settings[key]
             return defaults
         except Exception as e:
             print(bcolors.WARNING + f"Warning: Could not load settings.json: {e}. Using defaults." + bcolors.ENDC)
     return defaults
 
 settings = load_settings()
+
+def is_notification_enabled(notification_type):
+    """Check if a notification type is enabled in settings."""
+    return settings.get('notifications', {}).get(notification_type, True)
 
 # ====== Logging Setup ======
 SCRIPT_DIR = Path(__file__).parent.resolve()
@@ -258,6 +275,134 @@ def check_price_change(amount_paid):
         return True, expected_price, actual_price
 
     return False, expected_price, actual_price
+
+
+def check_and_send_expiry_reminder():
+    """Check if current permit is expiring soon and send reminder email if enabled."""
+    if not is_notification_enabled('expiry_reminder'):
+        return
+
+    # Read permit.json to get current permit info
+    permit_path = Path(__file__).parent / 'permit.json'
+    if not permit_path.exists():
+        return
+
+    try:
+        with open(permit_path, 'r') as f:
+            permit_data = json.load(f)
+    except Exception:
+        return
+
+    valid_to = permit_data.get('validTo', '')
+    if not valid_to:
+        return
+
+    # Parse expiry date (format: "Jan 5, 2026")
+    try:
+        expiry_date = datetime.strptime(valid_to, "%b %d, %Y")
+    except ValueError:
+        try:
+            # Try alternate format "Jan 5, 2026"
+            expiry_date = datetime.strptime(valid_to, "%b %d, %Y")
+        except ValueError:
+            return
+
+    # Calculate days until expiry
+    now = datetime.now()
+    days_remaining = (expiry_date - now).days
+
+    # Only send reminders for 0, 1, or 2 days remaining
+    if days_remaining < 0 or days_remaining > 2:
+        return
+
+    # Check if we already sent a reminder today (prevent duplicate emails)
+    reminder_file = Path(__file__).parent / '.last_expiry_reminder'
+    today_str = now.strftime("%Y-%m-%d")
+    if reminder_file.exists():
+        last_reminder = reminder_file.read_text().strip()
+        if last_reminder == f"{today_str}:{days_remaining}":
+            return  # Already sent reminder for this day count today
+
+    # Build reminder email
+    autobuyer_enabled = settings.get('autobuyer', {}).get('enabled', True)
+    permit_number = permit_data.get('permitNumber', 'Unknown')
+    plate_number = permit_data.get('plateNumber', 'Unknown')
+
+    if days_remaining == 0:
+        subject = "Parking Permit Expires TODAY"
+        message = f"Your parking permit expires today ({valid_to})."
+        if autobuyer_enabled:
+            message += " Auto-renewal will run at 4 PM."
+        else:
+            message += " Auto-buyer is DISABLED - renew manually!"
+    elif days_remaining == 1:
+        subject = "Parking Permit Expires TOMORROW"
+        message = f"Your parking permit expires tomorrow ({valid_to})."
+        if autobuyer_enabled:
+            message += " Auto-renewal will run tomorrow at 4 PM."
+        else:
+            message += " Auto-buyer is DISABLED - remember to renew!"
+    else:  # 2 days
+        subject = "Parking Permit Expires in 2 Days"
+        message = f"Your parking permit expires in 2 days ({valid_to})."
+        if autobuyer_enabled:
+            message += " Auto-renewal scheduled for expiry day at 4 PM."
+        else:
+            message += " Auto-buyer is DISABLED."
+
+    # Build HTML email
+    autobuyer_badge = f'''<span style="background-color: {'#e8f5e9' if autobuyer_enabled else '#ffebee'}; color: {'#2e7d32' if autobuyer_enabled else '#c62828'}; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Auto-buyer: {'ON' if autobuyer_enabled else 'OFF'}</span>'''
+
+    html_body = f'''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 500px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <tr>
+                        <td style="padding: 24px;">
+                            <h2 style="margin: 0 0 16px; color: #f57c00;">{subject}</h2>
+                            <p style="margin: 0 0 16px; color: #666;">{message}</p>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #fafafa; border-radius: 6px;">
+                                <tr>
+                                    <td style="padding: 16px;">
+                                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #999; font-size: 12px;">Permit Number</td>
+                                                <td style="padding: 8px 0; text-align: right; font-weight: bold;">{permit_number}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #999; font-size: 12px;">Plate</td>
+                                                <td style="padding: 8px 0; text-align: right; font-weight: bold;">{plate_number}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 8px 0; color: #999; font-size: 12px;">Expires</td>
+                                                <td style="padding: 8px 0; text-align: right; font-weight: bold; color: #f57c00;">{valid_to}</td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin: 16px 0 0; text-align: center;">{autobuyer_badge}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>'''
+
+    # Send the email
+    if send_email_notification(subject, message, html_body=html_body):
+        # Record that we sent this reminder
+        reminder_file.write_text(f"{today_str}:{days_remaining}")
+        log_event(f"Sent expiry reminder email: {days_remaining} days remaining", "SUCCESS")
 
 
 def build_success_email_html(vehicle_name, vehicle_plate, permit_data, github_success, price_change_info=None):
@@ -660,8 +805,20 @@ def find_permit_pdf(folder):
 
     return None
 
-def create_permit_json(permit_data, output_path):
+def create_permit_json(permit_data, output_path, vehicle_name=None):
     """Create permit.json file from parsed permit data."""
+    # Look up vehicle name from plate if not provided
+    if vehicle_name is None and permit_data.get("plate_number"):
+        try:
+            with open('config/info_cars.json', 'r') as f:
+                info_cars = json.load(f)
+            for car in info_cars:
+                if car.get('plate', '').upper() == permit_data['plate_number'].upper():
+                    vehicle_name = car.get('name')
+                    break
+        except Exception:
+            pass
+
     # Convert dates to match ESP32 format
     valid_from = permit_data["valid_from"]
     valid_to = permit_data["valid_to"]
@@ -698,6 +855,7 @@ def create_permit_json(permit_data, output_path):
     json_data = {
         "permitNumber": permit_data["permit_number"],
         "plateNumber": permit_data["plate_number"],
+        "vehicleName": vehicle_name,
         "validFrom": valid_from,
         "validTo": valid_to,
         "barcodeValue": permit_data["permit_number"][1:] if permit_data["permit_number"] else None,
@@ -1407,6 +1565,9 @@ if __name__ == "__main__":
     if deleted > 0:
         log_event(f"Cleaned up {deleted} old log file(s)", "INFO")
 
+    # Check for expiry reminders (runs every time script is invoked)
+    check_and_send_expiry_reminder()
+
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description='Toronto Parking Pass Buyer - Automated parking permit purchase',
@@ -1685,16 +1846,17 @@ Examples:
             if screenshots:
                 screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
 
-        send_email_notification(
-            subject="Parking Permit PAYMENT DECLINED",
-            body=f"Payment was declined when trying to purchase parking permit.\n\nPlease try again manually or use a different card.",
-            is_error=True,
-            html_body=build_error_email_html(
-                "Payment Declined",
-                "Payment was declined when trying to purchase parking permit.<br><br>Please try again manually or use a different card."
-            ),
-            screenshot_path=screenshot_path
-        )
+        if is_notification_enabled('purchase_failed'):
+            send_email_notification(
+                subject="Parking Permit PAYMENT DECLINED",
+                body=f"Payment was declined when trying to purchase parking permit.\n\nPlease try again manually or use a different card.",
+                is_error=True,
+                html_body=build_error_email_html(
+                    "Payment Declined",
+                    "Payment was declined when trying to purchase parking permit.<br><br>Please try again manually or use a different card."
+                ),
+                screenshot_path=screenshot_path
+            )
         sys.exit(1)
 
     if result and result[0] == "DRY_RUN":
@@ -1746,16 +1908,17 @@ Examples:
             if screenshots:
                 screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
 
-        send_email_notification(
-            subject="Parking Permit FAILED",
-            body="Failed to purchase parking permit.\n\nCheck the server logs for details.",
-            is_error=True,
-            html_body=build_error_email_html(
-                "Purchase Failed",
-                "Failed to purchase parking permit. The automation encountered an error before completing the purchase."
-            ),
-            screenshot_path=screenshot_path
-        )
+        if is_notification_enabled('purchase_failed'):
+            send_email_notification(
+                subject="Parking Permit FAILED",
+                body="Failed to purchase parking permit.\n\nCheck the server logs for details.",
+                is_error=True,
+                html_body=build_error_email_html(
+                    "Purchase Failed",
+                    "Failed to purchase parking permit. The automation encountered an error before completing the purchase."
+                ),
+                screenshot_path=screenshot_path
+            )
         sys.exit(1)
 
     vehicle_name, vehicle_plate = result
@@ -1809,9 +1972,10 @@ Examples:
             print(bcolors.OKGREEN + bcolors.UNDERLINE + "\n\nDone" + bcolors.ENDC)
 
             # Send success email
-            send_email_notification(
-                subject=f"Parking Permit Purchased - {vehicle_plate}",
-                body=f"""Parking permit successfully purchased!
+            if is_notification_enabled('purchase_success'):
+                send_email_notification(
+                    subject=f"Parking Permit Purchased - {vehicle_plate}",
+                    body=f"""Parking permit successfully purchased!
 
 Vehicle: {vehicle_name} ({vehicle_plate})
 Permit Number: {permit_data['permit_number']}
@@ -1820,24 +1984,25 @@ Valid To: {permit_data['valid_to']}
 
 GitHub Push: {'Success' if github_success else 'Failed'}
 """,
-                html_body=build_success_email_html(
-                    vehicle_name, vehicle_plate, permit_data,
-                    github_success,
-                    price_change_info=check_price_change(permit_data.get('amount_paid'))
+                    html_body=build_success_email_html(
+                        vehicle_name, vehicle_plate, permit_data,
+                        github_success,
+                        price_change_info=check_price_change(permit_data.get('amount_paid'))
+                    )
                 )
-            )
         else:
             print(bcolors.WARNING + "\nWarning: Some permit data could not be extracted." + bcolors.ENDC)
-            send_email_notification(
-                subject=f"Parking Permit Warning - {vehicle_plate}",
-                body=f"Permit was purchased but PDF parsing failed.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
-                is_error=True,
-                html_body=build_error_email_html(
-                    "PDF Parsing Failed",
-                    "Permit was purchased but the PDF could not be parsed. Please check manually.",
-                    f"{vehicle_name} ({vehicle_plate})"
+            if is_notification_enabled('purchase_failed'):
+                send_email_notification(
+                    subject=f"Parking Permit Warning - {vehicle_plate}",
+                    body=f"Permit was purchased but PDF parsing failed.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
+                    is_error=True,
+                    html_body=build_error_email_html(
+                        "PDF Parsing Failed",
+                        "Permit was purchased but the PDF could not be parsed. Please check manually.",
+                        f"{vehicle_name} ({vehicle_plate})"
+                    )
                 )
-            )
     else:
         print(bcolors.FAIL + "No permit PDF found." + bcolors.ENDC)
 
@@ -1849,17 +2014,18 @@ GitHub Push: {'Success' if github_success else 'Failed'}
             if screenshots:
                 screenshot_path = max(screenshots, key=lambda f: f.stat().st_mtime)
 
-        send_email_notification(
-            subject=f"Parking Permit Error - {vehicle_plate}",
-            body=f"Permit may have been purchased but no PDF was found.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
-            is_error=True,
-            html_body=build_error_email_html(
-                "No PDF Found",
-                "Permit may have been purchased but no PDF was downloaded. Please check manually.",
-                f"{vehicle_name} ({vehicle_plate})"
-            ),
-            screenshot_path=screenshot_path
-        )
+        if is_notification_enabled('purchase_failed'):
+            send_email_notification(
+                subject=f"Parking Permit Error - {vehicle_plate}",
+                body=f"Permit may have been purchased but no PDF was found.\n\nVehicle: {vehicle_name} ({vehicle_plate})\n\nPlease check manually.",
+                is_error=True,
+                html_body=build_error_email_html(
+                    "No PDF Found",
+                    "Permit may have been purchased but no PDF was downloaded. Please check manually.",
+                    f"{vehicle_name} ({vehicle_plate})"
+                ),
+                screenshot_path=screenshot_path
+            )
 
     print(bcolors.HEADER + bcolors.UNDERLINE + "\n\nWhy did I waste my life making this...\n\n" + bcolors.ENDC)
     print(bcolors.OKCYAN + "Remember: Parking is temporary, but sarcasm is forever." + bcolors.ENDC)
