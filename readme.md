@@ -22,8 +22,8 @@ Also, the City of Toronto won't let me buy a yearly permit, requires the permit 
 ## Quick Start
 1. Clone and install:
    ```bash
-   git clone https://github.com/VisTechProjects/toronto_parking_pass_buyer.git
-   cd toronto_parking_pass_buyer
+   git clone https://github.com/VisTechProjects/parking-permit-buyer.git
+   cd parking-permit-buyer
    pip install -r requirements.txt
    ```
 
