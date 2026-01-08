@@ -1,6 +1,6 @@
 # Toronto Parking Pass Buyer
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://www.python.org/) [![Selenium](https://img.shields.io/badge/Selenium-automation-green)](https://www.selenium.dev/) [![Asana SDK](https://img.shields.io/badge/Asana_SDK-v5.0+-orange)](https://github.com/Asana/python-asana)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue)](https://www.python.org/) [![Selenium](https://img.shields.io/badge/Selenium-automation-green)](https://www.selenium.dev/)
 
 Automates purchasing and refetching parking permits from [Toronto Temp parking permits](https://secure.toronto.ca/wes/eTPP/welcome.do). Fully automated from form filling to payment to PDF download.
 
@@ -16,7 +16,6 @@ Also, the City of Toronto won't let me buy a yearly permit, requires the permit 
 - **Refetch existing permits** - Search by plate + card, download PDF
 - **PDF parsing** - Extracts permit data (number, dates, barcode)
 - **GitHub sync** - Pushes permit.json to separate repo for ESP32 display
-- **Asana integration** - Creates reminder task to renew next week
 - **Interactive or CLI mode** - Run with prompts or fully automated with flags
 
 ## Quick Start
@@ -45,7 +44,6 @@ Also, the City of Toronto won't let me buy a yearly permit, requires the permit 
 - Google Chrome browser
 - ChromeDriver (managed automatically by `webdriver_manager`)
 - GitHub token (required for pushing permit.json)
-- Asana access token (required for task creation)
 
 ## File Structure
 ```
@@ -123,9 +121,6 @@ python parking_pass_buyer.py --vehicle 1 --card 0
 # Refetch existing permit
 python parking_pass_buyer.py --refetch --vehicle 1 --card 0
 
-# Skip Asana task creation
-python parking_pass_buyer.py --vehicle 1 --card 0 --no-asana
-
 # Skip GitHub push
 python parking_pass_buyer.py --vehicle 1 --card 0 --no-github
 
@@ -139,7 +134,6 @@ python parking_pass_buyer.py --parse-only
 | `--vehicle N` | Vehicle index (0-based) |
 | `--card N` | Payment card index (0-based) |
 | `--refetch` | Refetch existing permit instead of buying new |
-| `--no-asana` | Skip Asana task creation |
 | `--no-github` | Skip GitHub push |
 | `--parse-only` | Only parse existing PDF, no browser |
 | `--pdf PATH` | Specific PDF to parse (with --parse-only) |
@@ -160,4 +154,3 @@ This script pushes `permit.json` to the display repo, which an ESP32 e-ink displ
 ## Acknowledgments
 - [Selenium](https://www.selenium.dev/) for browser automation
 - [WebDriver Manager](https://github.com/SergeyPirogov/webdriver_manager) for managing ChromeDriver
-- [Asana Python SDK](https://github.com/Asana/python-asana) for task management
