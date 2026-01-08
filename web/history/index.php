@@ -469,7 +469,7 @@ $permits = array_reverse($permits);
             Showing <span id="visibleCount"><?= $totalPermits ?></span> of <?= $totalPermits ?> permits
         </div>
         <?php if ($totalSpent > 0): ?>
-            <div class="total-spent-line">Money wasted on Toronto parking: $<?= number_format($totalSpent, 2) ?></div>
+            <div class="total-spent-line">Money wasted on Toronto parking: <span style="color: #f44336;">$<?= number_format($totalSpent, 2) ?></span></div>
         <?php endif; ?>
 
         <?php if (!$autobuyerEnabled): ?>
