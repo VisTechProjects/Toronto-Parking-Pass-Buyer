@@ -523,7 +523,7 @@ $permits = array_reverse($permits);
                                         $permitNum = $permit['permitNumber'] ?? '';
                                         if (isset($priceChangeMap[$permitNum])):
                                             $change = $priceChangeMap[$permitNum];
-                                        ?><span class="price-change <?= $change > 0 ? 'up' : 'down' ?>"><?= $change > 0 ? '+' : '' ?>$<?= number_format(abs($change), 2) ?></span><?php endif; ?></span>
+                                        ?><span class="price-change <?= $change > 0 ? 'up' : 'down' ?>">(<?= $change > 0 ? '+' : '' ?>$<?= number_format(abs($change), 2) ?>)</span><?php endif; ?></span>
                                 <?php endif; ?>
                             </div>
                             <div class="permit-dates">
