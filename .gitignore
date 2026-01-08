@@ -6,6 +6,7 @@ permit.json
 /.claude
 __pycache__
 permit_history.log
+permits_history.json
 /logs
 buy_*.bat
 /error_screenshots
