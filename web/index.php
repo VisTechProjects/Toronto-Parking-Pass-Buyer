@@ -448,7 +448,6 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
                 <?php endif; ?>
                 <a href="/parking/history/" class="link">View History</a>
                 <a href="/parking/prices/" class="link">Price History</a>
-                <a href="/parking/settings/" class="link">Settings</a>
             </div>
         <?php else: ?>
             <div class="no-permit">No permit data found</div>

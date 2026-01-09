@@ -204,7 +204,7 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
     <div class="container">
         <?php if (count($priceChanges) > 0): ?>
         <div class="card">
-            <div class="header">Price Statistics</div>
+            <div class="header" style="margin-bottom: 16px;">Price Statistics</div>
             <div class="stats-grid">
                 <div class="stat">
                     <div class="stat-value">$<?= number_format($currentPrice, 2) ?></div>
@@ -260,7 +260,6 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
         <div class="links">
             <a href="/parking/" class="link">View Current Permit</a>
             <a href="/parking/history/" class="link">View History</a>
-            <a href="/parking/settings/" class="link">Settings</a>
         </div>
     </div>
 </body>
