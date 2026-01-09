@@ -298,7 +298,8 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
         .links {
             display: flex;
             justify-content: center;
-            gap: 20px;
+            flex-wrap: wrap;
+            gap: 12px 20px;
             margin-top: 14px;
             padding-bottom: 20px;
         }
