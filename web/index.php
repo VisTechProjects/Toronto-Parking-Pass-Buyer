@@ -473,8 +473,8 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
 🖕  https://media.giphy.com/media/xndHaRIcvge5y/giphy.gif
 
 If you're already here, check out my other automated bullshit:
-🖕 Auto-buyer: https://github.com/VisTechProjects/Toronto-Parking-Pass-Buyer
-🖕 E-ink display: https://github.com/VisTechProjects/parking_pass_display
+🖕 Auto-buyer: https://github.com/VisTechProjects/parking-permit-buyer
+🖕 E-ink display: https://github.com/VisTechProjects/parking-permit-display
         `, 'color: #4caf50; font-family: monospace;');
     </script>
 </body>
