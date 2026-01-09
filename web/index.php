@@ -299,7 +299,7 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
-            gap: 12px 20px;
+            gap: 12px 14px;
             margin-top: 14px;
             padding-bottom: 20px;
         }
