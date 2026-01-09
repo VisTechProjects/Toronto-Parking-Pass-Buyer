@@ -1,5 +1,5 @@
 <?php
-$historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
+require_once __DIR__ . '/../config.php';
 
 $permits = [];
 if (file_exists($historyFile)) {
@@ -236,7 +236,7 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
             <div class="change-item">
                 <div>
                     <div class="change-date"><?= htmlspecialchars($change['date']) ?></div>
-                    <a href="/parking/?permit=<?= htmlspecialchars($change['permitNumber']) ?>" class="change-permit"><?= htmlspecialchars($change['permitNumber']) ?></a>
+                    <a href="<?= $urlBase ?>/?permit=<?= htmlspecialchars($change['permitNumber']) ?>" class="change-permit"><?= htmlspecialchars($change['permitNumber']) ?></a>
                 </div>
                 <div class="change-info">
                     <div class="change-price">$<?= number_format($change['price'], 2) ?></div>
@@ -258,8 +258,8 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
         <?php endif; ?>
 
         <div class="links">
-            <a href="/parking/" class="link">Current Permit</a>
-            <a href="/parking/history/" class="link">Permit History</a>
+            <a href="<?= $urlBase ?>/" class="link">Current Permit</a>
+            <a href="<?= $urlBase ?>/history/" class="link">Permit History</a>
         </div>
     </div>
 </body>

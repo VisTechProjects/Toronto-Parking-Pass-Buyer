@@ -1,8 +1,5 @@
 <?php
-$historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
-$carsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/info_cars.json';
-$permitFile = '/home/admin/Toronto-Parking-Pass-Buyer/permit.json';
-$settingsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/settings.json';
+require_once __DIR__ . '/../config.php';
 
 $permits = [];
 if (file_exists($historyFile)) {
@@ -475,7 +472,7 @@ $permits = array_reverse($permits);
         <?php if (!$autobuyerEnabled): ?>
             <div class="autobuyer-warning">
                 Auto-buyer is disabled. Permits will NOT be purchased automatically.
-                <a href="/parking/settings/">Enable it</a>
+                <a href="<?= $urlBase ?>/settings/">Enable it</a>
             </div>
         <?php endif; ?>
 
@@ -510,7 +507,7 @@ $permits = array_reverse($permits);
                     $validFrom = parseDate($permit['validFrom'] ?? '');
                     $dateAttr = $validFrom ? $validFrom->format('Y-m-d') : '';
                     ?>
-                    <a href="/parking/?permit=<?= htmlspecialchars($permit['permitNumber'] ?? '') ?>"
+                    <a href="<?= $urlBase ?>/?permit=<?= htmlspecialchars($permit['permitNumber'] ?? '') ?>"
                        class="permit-card"
                        data-plate="<?= htmlspecialchars($permit['plateNumber'] ?? '') ?>"
                        data-status="<?= $status['class'] ?>"
@@ -544,9 +541,9 @@ $permits = array_reverse($permits);
 
         <div class="no-results" id="noResults">No permits match your filters</div>
         <div style="display: flex; justify-content: center; gap: 20px; margin-top: 16px; padding-bottom: 20px;">
-            <a href="/parking/" class="back-link">Current Permit</a>
-            <a href="/parking/prices/" class="back-link">Price History</a>
-            <a href="/parking/settings/" class="back-link">Settings</a>
+            <a href="<?= $urlBase ?>/" class="back-link">Current Permit</a>
+            <a href="<?= $urlBase ?>/prices/" class="back-link">Price History</a>
+            <a href="<?= $urlBase ?>/settings/" class="back-link">Settings</a>
         </div>
     </div>
 

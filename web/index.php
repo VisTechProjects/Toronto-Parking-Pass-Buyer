@@ -1,8 +1,5 @@
 <?php
-$permitFile = '/home/admin/Toronto-Parking-Pass-Buyer/permit.json';
-$historyFile = '/home/admin/Toronto-Parking-Pass-Buyer/permits_history.json';
-$carsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/info_cars.json';
-$settingsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/settings.json';
+require_once __DIR__ . '/config.php';
 
 // Load settings for autobuyer status
 $settings = [];
@@ -396,7 +393,7 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
     <div class="card">
         <?php if (!$autobuyerEnabled): ?>
             <div class="autobuyer-warning">
-                Auto-buyer is disabled. <a href="/parking/settings/">Enable it</a>
+                Auto-buyer is disabled. <a href="<?= $urlBase ?>/settings/">Enable it</a>
             </div>
         <?php endif; ?>
         <?php if ($permit): ?>
@@ -444,15 +441,15 @@ if ($permit && !$isHistorical && file_exists($historyFile) && isWeeklyPermit($pe
             </div>
             <div class="links">
                 <?php if ($isHistorical): ?>
-                    <a href="/parking/" class="link">View Current</a>
+                    <a href="<?= $urlBase ?>/" class="link">View Current</a>
                 <?php endif; ?>
-                <a href="/parking/history/" class="link">Permit History</a>
-                <a href="/parking/prices/" class="link">Price History</a>
+                <a href="<?= $urlBase ?>/history/" class="link">Permit History</a>
+                <a href="<?= $urlBase ?>/prices/" class="link">Price History</a>
             </div>
         <?php else: ?>
             <div class="no-permit">No permit data found</div>
             <div class="links">
-                <a href="/parking/history/" class="link">Permit History</a>
+                <a href="<?= $urlBase ?>/history/" class="link">Permit History</a>
             </div>
         <?php endif; ?>
     </div>

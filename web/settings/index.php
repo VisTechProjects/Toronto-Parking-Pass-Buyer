@@ -1,6 +1,5 @@
 <?php
-$settingsFile = '/home/admin/Toronto-Parking-Pass-Buyer/config/settings.json';
-$envFile = '/home/admin/Toronto-Parking-Pass-Buyer/.env';
+require_once __DIR__ . '/../config.php';
 
 // Load settings
 $settings = [];
@@ -793,9 +792,9 @@ $notifySecurityAlerts = $notifications['security_alerts'] ?? true;
         </div>
 
         <div class="links">
-            <a href="/parking/" class="link">Current Permit</a>
-            <a href="/parking/history/" class="link">Permit History</a>
-            <a href="/parking/prices/" class="link">Price History</a>
+            <a href="<?= $urlBase ?>/" class="link">Current Permit</a>
+            <a href="<?= $urlBase ?>/history/" class="link">Permit History</a>
+            <a href="<?= $urlBase ?>/prices/" class="link">Price History</a>
         </div>
     </div>
 
