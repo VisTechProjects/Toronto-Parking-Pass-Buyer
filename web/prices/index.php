@@ -258,8 +258,8 @@ $percentChange = $firstPrice > 0 ? (($currentPrice - $firstPrice) / $firstPrice)
         <?php endif; ?>
 
         <div class="links">
-            <a href="/parking/" class="link">View Current Permit</a>
-            <a href="/parking/history/" class="link">View History</a>
+            <a href="/parking/" class="link">Current Permit</a>
+            <a href="/parking/history/" class="link">Permit History</a>
         </div>
     </div>
 </body>
